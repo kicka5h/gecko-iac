@@ -27,11 +27,11 @@ jobs:
             exit 0
           fi
 
-          # Require pattern: v<semver>/<Codename>-<Milestone>
-          # Examples: v0.1.0/Amalosia-Core, v1.2.3/Belanotus-Networking
-          PATTERN='^v[0-9]+\.[0-9]+\.[0-9]+/[A-Z][a-zA-Z]+-[A-Z][a-zA-Z]+$'
+          # Require pattern: v<semver>/<Codename>-<Milestone> (case-insensitive)
+          # Examples: v0.1.0/Amalosia-Core, v0.1.0/amalosia-core
+          PATTERN='^v[0-9]+\.[0-9]+\.[0-9]+/[a-z]+-[a-z]+$'
 
-          if echo "$BRANCH" | grep -qE "$PATTERN"; then
+          if echo "$BRANCH" | grep -qiE "$PATTERN"; then
             echo "✓ Branch name '$BRANCH' matches required pattern."
           else
             echo ""

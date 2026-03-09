@@ -38,15 +38,6 @@ type Flag struct {
 	Required bool
 }
 
-// rootCmd is the top-level command registry
-var rootCmd = &Command{
-	Name:  "gecko",
-	Short: "🦎 Gecko — FOSS Infrastructure as Code",
-	Long: `Gecko is an open-source Infrastructure as Code framework that prioritizes
-FOSS infrastructure solutions. Manage Kubernetes, Proxmox, Nomad, Gitea,
-and more with a unified, elegant workflow.`,
-}
-
 // allCommands registers every gecko subcommand
 var allCommands = map[string]*Command{}
 
