@@ -1,10 +1,19 @@
 package cmd
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"os"
+	"strings"
+	"sync"
 	"time"
 
+	"github.com/gecko-iac/gecko/internal/core"
+	"github.com/gecko-iac/gecko/internal/lang"
+	"github.com/gecko-iac/gecko/internal/state"
 	"github.com/gecko-iac/gecko/internal/ui"
+	k8sprovider "github.com/gecko-iac/gecko/providers/foss"
 )
 
 var gripCmd = &Command{
@@ -29,43 +38,190 @@ unless --auto-approve is set.`,
 }
 
 func runGrip(args []string, flags map[string]string) error {
+	ctx := context.Background()
+
 	ui.PrintBannerSmall("grip")
 
 	workspace := flagVal(flags, "workspace", "dev")
 	autoApprove := flagSet(flags, "auto-approve") || flagSet(flags, "y")
+	planFile := flagVal(flags, "plan", "")
+	target := flagVal(flags, "target", "")
 
 	ui.Info(fmt.Sprintf("Preparing to grip workspace %s%q%s...", ui.GeckoTeal, workspace, ui.Reset))
 	fmt.Println()
 
-	// Show abbreviated plan
-	spin := ui.NewSpinner("Loading current state")
+	// 1. Load project
+	spin := ui.NewSpinner("Loading Scute project")
 	spin.Start()
-	time.Sleep(500 * time.Millisecond)
+	loaded, err := lang.LoadProject(lang.LoadOptions{Workspace: workspace})
+	if err != nil {
+		spin.Stop(false)
+		ui.Error(fmt.Sprintf("Failed to load project: %s", err))
+		return err
+	}
 	spin.Stop(true)
 
-	spin = ui.NewSpinner("Computing plan")
+	// 2. Configure providers
+	spin = ui.NewSpinner("Configuring providers")
 	spin.Start()
-	time.Sleep(800 * time.Millisecond)
+	for _, hint := range loaded.ProviderHints {
+		lname := strings.ToLower(hint.Name)
+		switch lname {
+		case "k8s", "kubernetes":
+			p := k8sprovider.NewProvider(hint.Config)
+			if err := p.Configure(ctx, hint.Config); err != nil {
+				spin.Stop(false)
+				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
+				spin = ui.NewSpinner("Configuring providers")
+				spin.Start()
+			}
+			loaded.Stack.RegisterProvider(p)
+		case "kind":
+			p := k8sprovider.NewKindProvider(hint.Config)
+			if err := p.Configure(ctx, hint.Config); err != nil {
+				spin.Stop(false)
+				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
+				spin = ui.NewSpinner("Configuring providers")
+				spin.Start()
+			}
+			loaded.Stack.RegisterProvider(p)
+		case "vault":
+			p := k8sprovider.NewVaultProvider(hint.Config)
+			if err := p.Configure(ctx, hint.Config); err != nil {
+				spin.Stop(false)
+				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
+				spin = ui.NewSpinner("Configuring providers")
+				spin.Start()
+			}
+			loaded.Stack.RegisterProvider(p)
+		case "nomad":
+			p := k8sprovider.NewNomadProvider(hint.Config)
+			if err := p.Configure(ctx, hint.Config); err != nil {
+				spin.Stop(false)
+				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
+				spin = ui.NewSpinner("Configuring providers")
+				spin.Start()
+			}
+			loaded.Stack.RegisterProvider(p)
+		default:
+			spin.Stop(true)
+			ui.Warn(fmt.Sprintf("Unknown provider %q — skipping", hint.Name))
+			spin = ui.NewSpinner("Configuring providers")
+			spin.Start()
+		}
+	}
 	spin.Stop(true)
 
+	// 3. Load state backend
+	spin = ui.NewSpinner("Loading current state")
+	spin.Start()
+	backend, berr := state.DefaultLocalBackend()
+	var stateBackend core.StateBackend
+	if berr != nil {
+		spin.Stop(false)
+		ui.Warn(fmt.Sprintf("Could not load state backend: %s (continuing with empty state)", berr))
+		stateBackend = &emptyStateBackend{}
+	} else {
+		spin.Stop(true)
+		stateBackend = backend
+	}
+
+	// 4. Build engine
+	engine := core.NewEngine(loaded.Stack, stateBackend)
+
+	// 5. Compute or load plan
+	var plan *core.PlanResult
+	if planFile != "" {
+		spin = ui.NewSpinner(fmt.Sprintf("Loading plan from %s", planFile))
+		spin.Start()
+		data, err := os.ReadFile(planFile)
+		if err != nil {
+			spin.Stop(false)
+			ui.Error(fmt.Sprintf("Failed to read plan file: %s", err))
+			return err
+		}
+		plan = &core.PlanResult{}
+		if err := json.Unmarshal(data, plan); err != nil {
+			spin.Stop(false)
+			ui.Error(fmt.Sprintf("Failed to parse plan file: %s", err))
+			return err
+		}
+		spin.Stop(true)
+	} else {
+		spin = ui.NewSpinner("Computing resource dependency graph")
+		spin.Start()
+		spin.Stop(true)
+
+		spin = ui.NewSpinner("Calculating diffs")
+		spin.Start()
+		plan, err = engine.Plan(ctx)
+		if err != nil {
+			spin.Stop(false)
+			ui.Error(fmt.Sprintf("Plan failed: %s", err))
+			return err
+		}
+		spin.Stop(true)
+	}
+
+	// 6. Filter by target if specified
+	if target != "" {
+		var filtered []*core.Diff
+		for _, d := range plan.Diffs {
+			if string(d.ResourceID) == target || strings.HasSuffix(string(d.ResourceID), "::"+target) {
+				filtered = append(filtered, d)
+			}
+		}
+		plan.Diffs = filtered
+		// Recount
+		plan.Adds, plan.Updates, plan.Destroys, plan.NoOps = 0, 0, 0, 0
+		for _, d := range plan.Diffs {
+			switch d.Kind {
+			case core.ChangeAdd:
+				plan.Adds++
+			case core.ChangeUpdate, core.ChangeReplace:
+				plan.Updates++
+			case core.ChangeDelete:
+				plan.Destroys++
+			case core.ChangeNoOp:
+				plan.NoOps++
+			}
+		}
+	}
+
+	// 7. Show plan summary
 	fmt.Println()
 	ui.Header("Changes to Apply")
 	fmt.Println()
 
-	ui.PlanAdd("k8s:namespace", "monitoring")
-	ui.PlanAdd("k8s:deployment", "prometheus")
-	ui.PlanAdd("k8s:service", "prometheus-svc")
-	ui.PlanAdd("k8s:configmap", "prometheus-config")
-	ui.PlanAdd("k8s:deployment", "grafana")
-	ui.PlanAdd("k8s:service", "grafana-svc")
-	ui.PlanAdd("k8s:persistentvolumeclaim", "grafana-pvc")
+	hasActual := false
+	for _, diff := range plan.Diffs {
+		rType, rName := splitResourceID(string(diff.ResourceID))
+		switch diff.Kind {
+		case core.ChangeAdd:
+			ui.PlanAdd(rType, rName)
+			hasActual = true
+		case core.ChangeUpdate, core.ChangeReplace:
+			ui.PlanChange(rType, rName)
+			hasActual = true
+		case core.ChangeDelete:
+			ui.PlanDestroy(rType, rName)
+			hasActual = true
+		case core.ChangeNoOp:
+			ui.PlanNoChange(rType, rName)
+		}
+	}
+
+	if !hasActual {
+		fmt.Println()
+		ui.Info("No changes to apply. Infrastructure is up to date.")
+		fmt.Println()
+		return nil
+	}
+
 	fmt.Println()
-	ui.PlanChange("k8s:deployment", "api-server")
-	ui.PlanChange("k8s:configmap", "app-config")
+	ui.PlanSummary(plan.Adds, plan.Updates, plan.Destroys)
 
-	ui.PlanSummary(7, 2, 0)
-
-	// Confirmation
+	// 8. Confirmation prompt
 	if !autoApprove {
 		if !ui.Confirm("Apply these changes?") {
 			fmt.Println()
@@ -79,60 +235,105 @@ func runGrip(args []string, flags map[string]string) error {
 	ui.Header("Applying Changes")
 	fmt.Println()
 
-	// Apply each resource with progress
-	type applyStep struct {
-		resource string
-		delay    time.Duration
+	// 9. Apply with live progress
+	type progressEvent struct {
+		id     core.ResourceID
+		status core.ResourceStatus
 	}
 
-	steps := []applyStep{
-		{"k8s:namespace.monitoring", 400 * time.Millisecond},
-		{"k8s:configmap.prometheus-config", 300 * time.Millisecond},
-		{"k8s:deployment.prometheus", 1200 * time.Millisecond},
-		{"k8s:service.prometheus-svc", 500 * time.Millisecond},
-		{"k8s:persistentvolumeclaim.grafana-pvc", 600 * time.Millisecond},
-		{"k8s:deployment.grafana", 1100 * time.Millisecond},
-		{"k8s:service.grafana-svc", 400 * time.Millisecond},
-		{"k8s:deployment.api-server", 900 * time.Millisecond},
-		{"k8s:configmap.app-config", 250 * time.Millisecond},
-	}
+	eventCh := make(chan progressEvent, 64)
+	spinners := &sync.Map{} // ResourceID → *ui.Spinner
 
-	start := time.Now()
-	for i, step := range steps {
-		s := ui.NewSpinner(fmt.Sprintf("  %s  %-50s", ui.GeckoMuted+"creating"+ui.Reset, step.resource))
-		s.Start()
-		time.Sleep(step.delay)
-		s.Stop(true)
-		ui.ProgressBar(i+1, len(steps), fmt.Sprintf(" %d/%d resources", i+1, len(steps)))
-	}
+	// Goroutine to render progress events
+	renderDone := make(chan struct{})
+	go func() {
+		defer close(renderDone)
+		for ev := range eventCh {
+			rType, rName := splitResourceID(string(ev.id))
+			label := fmt.Sprintf("%s.%s", rType, rName)
+			switch ev.status {
+			case core.StatusCreating:
+				s := ui.NewSpinner(fmt.Sprintf("  %screating%s  %-50s", ui.GeckoMuted, ui.Reset, label))
+				s.Start()
+				spinners.Store(ev.id, s)
+			case core.StatusUpdating:
+				s := ui.NewSpinner(fmt.Sprintf("  %supdating%s  %-50s", ui.GeckoMuted, ui.Reset, label))
+				s.Start()
+				spinners.Store(ev.id, s)
+			case core.StatusRunning:
+				if sv, ok := spinners.Load(ev.id); ok {
+					sv.(*ui.Spinner).Stop(true)
+					spinners.Delete(ev.id)
+				}
+			case core.StatusFailed:
+				if sv, ok := spinners.Load(ev.id); ok {
+					sv.(*ui.Spinner).Stop(false)
+					spinners.Delete(ev.id)
+				}
+			}
+		}
+	}()
 
-	elapsed := time.Since(start)
+	applyStart := time.Now()
+	applyResult, applyErr := engine.Apply(ctx, plan, func(id core.ResourceID, status core.ResourceStatus) {
+		eventCh <- progressEvent{id: id, status: status}
+	})
+	close(eventCh)
+	<-renderDone
+
+	// Stop any dangling spinners (e.g. on partial failure)
+	spinners.Range(func(key, val interface{}) bool {
+		val.(*ui.Spinner).Stop(false)
+		return true
+	})
+
+	elapsed := time.Since(applyStart)
 	fmt.Println()
 	ui.Divider()
 	fmt.Println()
 
-	fmt.Printf("  %s🦎 Gripped!%s Applied %s9 changes%s in %s%.1fs%s\n\n",
-		ui.GeckoGreen+ui.Bold, ui.Reset,
-		ui.GeckoSuccess+ui.Bold, ui.Reset,
-		ui.GeckoTeal+ui.Bold, elapsed.Seconds(), ui.Reset)
+	// 10. Show results
+	succeeded := len(applyResult.Succeeded)
+	failed := len(applyResult.Failed)
 
-	// Post-apply summary
-	ui.Header("Applied Resources")
-	ui.TableHeader("Resource", "Status", "Time")
-	ui.TableRow("k8s:namespace.monitoring", ui.StatusTag("running"), "0.4s")
-	ui.TableRow("k8s:deployment.prometheus", ui.StatusTag("running"), "1.2s")
-	ui.TableRow("k8s:service.prometheus-svc", ui.StatusTag("running"), "0.5s")
-	ui.TableRow("k8s:configmap.prometheus-config", ui.StatusTag("running"), "0.3s")
-	ui.TableRow("k8s:deployment.grafana", ui.StatusTag("running"), "1.1s")
-	ui.TableRow("k8s:service.grafana-svc", ui.StatusTag("running"), "0.4s")
-	ui.TableRow("k8s:persistentvolumeclaim.grafana-pvc", ui.StatusTag("running"), "0.6s")
-	ui.TableRow("k8s:deployment.api-server", ui.StatusTag("running"), "0.9s")
-	ui.TableRow("k8s:configmap.app-config", ui.StatusTag("running"), "0.3s")
-	fmt.Println()
+	if failed == 0 {
+		fmt.Printf("  %s🦎 Gripped!%s Applied %s%d change(s)%s in %s%.1fs%s\n\n",
+			ui.GeckoGreen+ui.Bold, ui.Reset,
+			ui.GeckoSuccess+ui.Bold, succeeded, ui.Reset,
+			ui.GeckoTeal+ui.Bold, elapsed.Seconds(), ui.Reset)
+	} else {
+		fmt.Printf("  %s⚠ Partial apply%s — %s%d succeeded%s, %s%d failed%s in %s%.1fs%s\n\n",
+			ui.GeckoWarning+ui.Bold, ui.Reset,
+			ui.GeckoSuccess, succeeded, ui.Reset,
+			ui.GeckoDanger, failed, ui.Reset,
+			ui.GeckoTeal, elapsed.Seconds(), ui.Reset)
+	}
+
+	if succeeded > 0 {
+		ui.Header("Applied Resources")
+		ui.TableHeader("Resource", "Status", "Time")
+		for _, id := range applyResult.Succeeded {
+			rType, rName := splitResourceID(string(id))
+			ui.TableRow(fmt.Sprintf("%s.%s", rType, rName), ui.StatusTag("running"), "-")
+		}
+		fmt.Println()
+	}
+
+	if failed > 0 {
+		ui.Header("Failed Resources")
+		for _, id := range applyResult.Failed {
+			rType, rName := splitResourceID(string(id))
+			ui.Error(fmt.Sprintf("%s.%s failed to apply", rType, rName))
+		}
+		fmt.Println()
+	}
 
 	ui.Info("Run 'gecko bask' to view your infrastructure dashboard.")
 	ui.Info("Run 'gecko tail' to stream live logs.")
 	fmt.Println()
 
+	if applyErr != nil {
+		return applyErr
+	}
 	return nil
 }

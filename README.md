@@ -400,10 +400,4 @@ type Provider interface {
 
 ---
 
-## License
-
-Apache 2.0. Build what you want, self-host everything, own your infrastructure.
-
----
-
 *🦎 Infrastructure that grips, scales, and never lets go.*

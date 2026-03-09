@@ -1,11 +1,16 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
-	"math/rand"
+	"strings"
 	"time"
 
+	"github.com/gecko-iac/gecko/internal/core"
+	"github.com/gecko-iac/gecko/internal/lang"
+	"github.com/gecko-iac/gecko/internal/state"
 	"github.com/gecko-iac/gecko/internal/ui"
+	k8sprovider "github.com/gecko-iac/gecko/providers/foss"
 )
 
 // ─── gecko molt ───────────────────────────────────────────────────────────────
@@ -30,33 +35,154 @@ Protected resources will be skipped unless --force is used.`,
 }
 
 func runMolt(args []string, flags map[string]string) error {
+	ctx := context.Background()
+
 	ui.PrintBannerSmall("molt")
 
 	workspace := flagVal(flags, "workspace", "dev")
 	autoApprove := flagSet(flags, "auto-approve") || flagSet(flags, "y")
+	target := flagVal(flags, "target", "")
 
 	fmt.Printf("  %s%s⚠  WARNING: This will destroy all infrastructure in workspace %q%s\n\n",
 		ui.GeckoDanger, ui.Bold, workspace, ui.Reset)
 
+	// 1. Load project
+	spin := ui.NewSpinner("Loading Scute project")
+	spin.Start()
+	loaded, err := lang.LoadProject(lang.LoadOptions{Workspace: workspace})
+	if err != nil {
+		spin.Stop(false)
+		ui.Error(fmt.Sprintf("Failed to load project: %s", err))
+		return err
+	}
+	spin.Stop(true)
+
+	// 2. Configure providers
+	spin = ui.NewSpinner("Configuring providers")
+	spin.Start()
+	for _, hint := range loaded.ProviderHints {
+		lname := strings.ToLower(hint.Name)
+		switch lname {
+		case "k8s", "kubernetes":
+			p := k8sprovider.NewProvider(hint.Config)
+			if err := p.Configure(ctx, hint.Config); err != nil {
+				spin.Stop(false)
+				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
+				spin = ui.NewSpinner("Configuring providers")
+				spin.Start()
+			}
+			loaded.Stack.RegisterProvider(p)
+		case "kind":
+			p := k8sprovider.NewKindProvider(hint.Config)
+			if err := p.Configure(ctx, hint.Config); err != nil {
+				spin.Stop(false)
+				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
+				spin = ui.NewSpinner("Configuring providers")
+				spin.Start()
+			}
+			loaded.Stack.RegisterProvider(p)
+		case "vault":
+			p := k8sprovider.NewVaultProvider(hint.Config)
+			if err := p.Configure(ctx, hint.Config); err != nil {
+				spin.Stop(false)
+				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
+				spin = ui.NewSpinner("Configuring providers")
+				spin.Start()
+			}
+			loaded.Stack.RegisterProvider(p)
+		case "nomad":
+			p := k8sprovider.NewNomadProvider(hint.Config)
+			if err := p.Configure(ctx, hint.Config); err != nil {
+				spin.Stop(false)
+				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
+				spin = ui.NewSpinner("Configuring providers")
+				spin.Start()
+			}
+			loaded.Stack.RegisterProvider(p)
+		default:
+			spin.Stop(true)
+			ui.Warn(fmt.Sprintf("Unknown provider %q — skipping", hint.Name))
+			spin = ui.NewSpinner("Configuring providers")
+			spin.Start()
+		}
+	}
+	spin.Stop(true)
+
+	// 3. Load state backend
+	spin = ui.NewSpinner("Loading current state")
+	spin.Start()
+	backend, berr := state.DefaultLocalBackend()
+	var stateBackend core.StateBackend
+	if berr != nil {
+		spin.Stop(false)
+		ui.Warn(fmt.Sprintf("Could not load state backend: %s (continuing with empty state)", berr))
+		stateBackend = &emptyStateBackend{}
+	} else {
+		spin.Stop(true)
+		stateBackend = backend
+	}
+
+	// 4. Build destroy plan — all graph resources in reverse topological order
+	spin = ui.NewSpinner("Building destroy plan")
+	spin.Start()
+
+	nodes, err := loaded.Stack.Graph.TopologicalSort()
+	if err != nil {
+		spin.Stop(false)
+		ui.Error(fmt.Sprintf("Dependency resolution failed: %s", err))
+		return err
+	}
+
+	// Reverse: destroy dependents before dependencies
+	for i, j := 0, len(nodes)-1; i < j; i, j = i+1, j-1 {
+		nodes[i], nodes[j] = nodes[j], nodes[i]
+	}
+
+	var diffs []*core.Diff
+	for _, node := range nodes {
+		if target != "" && string(node.ID) != target && !strings.HasSuffix(string(node.ID), "::"+target) {
+			continue
+		}
+		diffs = append(diffs, &core.Diff{
+			ResourceID: node.ID,
+			Kind:       core.ChangeDelete,
+		})
+	}
+
+	plan := &core.PlanResult{
+		StackName: loaded.Stack.Name,
+		Workspace: workspace,
+		Diffs:     diffs,
+		Destroys:  len(diffs),
+		CreatedAt: time.Now(),
+	}
+	spin.Stop(true)
+
+	if len(diffs) == 0 {
+		fmt.Println()
+		ui.Info("No resources to destroy.")
+		fmt.Println()
+		return nil
+	}
+
+	// 5. Show what will be destroyed
+	fmt.Println()
 	ui.Header("Resources to Destroy")
 	fmt.Println()
-	ui.PlanDestroy("k8s:service", "grafana-svc")
-	ui.PlanDestroy("k8s:service", "prometheus-svc")
-	ui.PlanDestroy("k8s:deployment", "grafana")
-	ui.PlanDestroy("k8s:deployment", "prometheus")
-	ui.PlanDestroy("k8s:persistentvolumeclaim", "grafana-pvc")
-	ui.PlanDestroy("k8s:configmap", "prometheus-config")
-	ui.PlanDestroy("k8s:configmap", "app-config")
-	ui.PlanDestroy("k8s:deployment", "api-server")
-	ui.PlanDestroy("k8s:namespace", "monitoring")
-
-	ui.PlanSummary(0, 0, 9)
+	for _, d := range diffs {
+		rType, rName := splitResourceID(string(d.ResourceID))
+		ui.PlanDestroy(rType, rName)
+	}
+	fmt.Println()
+	ui.PlanSummary(0, 0, len(diffs))
 
 	fmt.Printf("  %s%sProtected resources will be skipped.%s Use --force to override.\n\n",
 		ui.GeckoMuted, ui.Italic, ui.Reset)
 
+	// 6. Confirm
 	if !autoApprove {
-		fmt.Printf("  %sType %s%q%s to confirm destruction: ", ui.GeckoMuted, ui.GeckoDanger+ui.Bold, workspace, ui.Reset)
+		fmt.Printf("  %sType %s%q%s to confirm destruction: ",
+			ui.GeckoMuted, ui.GeckoDanger+ui.Bold, workspace, ui.Reset)
 		var confirm string
 		fmt.Scanln(&confirm)
 		if confirm != workspace {
@@ -71,31 +197,46 @@ func runMolt(args []string, flags map[string]string) error {
 	ui.Header("Destroying Resources")
 	fmt.Println()
 
-	destroySteps := []string{
-		"k8s:service.grafana-svc",
-		"k8s:service.prometheus-svc",
-		"k8s:deployment.grafana",
-		"k8s:deployment.prometheus",
-		"k8s:deployment.api-server",
-		"k8s:persistentvolumeclaim.grafana-pvc",
-		"k8s:configmap.prometheus-config",
-		"k8s:configmap.app-config",
-		"k8s:namespace.monitoring",
-	}
+	// 7. Apply destroy plan
+	engine := core.NewEngine(loaded.Stack, stateBackend)
+	applyStart := time.Now()
+	applyResult, _ := engine.Apply(ctx, plan, func(id core.ResourceID, status core.ResourceStatus) {
+		rType, rName := splitResourceID(string(id))
+		label := fmt.Sprintf("%s.%s", rType, rName)
+		if status == core.StatusPending {
+			s := ui.NewSpinner(fmt.Sprintf("  %sdestroying%s  %-50s", ui.GeckoDanger, ui.Reset, label))
+			s.Start()
+			// spinner runs until next status update; since Apply is sequential we stop inline
+			s.Stop(true)
+		}
+	})
 
-	for i, r := range destroySteps {
-		s := ui.NewSpinner(fmt.Sprintf("  %s  destroying  %s%s%s", ui.GeckoDanger, ui.BrightWhite, r, ui.Reset))
-		s.Start()
-		time.Sleep(time.Duration(400+rand.Intn(600)) * time.Millisecond)
-		s.Stop(true)
-		ui.ProgressBar(i+1, len(destroySteps), fmt.Sprintf(" %d/%d destroyed", i+1, len(destroySteps)))
-	}
-
+	elapsed := time.Since(applyStart)
 	fmt.Println()
 	ui.Divider()
-	fmt.Printf("\n  %s💀 Molted.%s All managed resources in %s%q%s have been destroyed.\n\n",
-		ui.GeckoDanger+ui.Bold, ui.Reset,
-		ui.GeckoTeal, workspace, ui.Reset)
+	fmt.Println()
+
+	succeeded := len(applyResult.Succeeded)
+	failed := len(applyResult.Failed)
+
+	if failed == 0 {
+		fmt.Printf("  %s💀 Molted.%s Destroyed %s%d resource(s)%s in %s%.1fs%s\n\n",
+			ui.GeckoDanger+ui.Bold, ui.Reset,
+			ui.GeckoSuccess+ui.Bold, succeeded, ui.Reset,
+			ui.GeckoTeal+ui.Bold, elapsed.Seconds(), ui.Reset)
+	} else {
+		fmt.Printf("  %s⚠ Partial destroy%s — %s%d succeeded%s, %s%d failed%s in %s%.1fs%s\n\n",
+			ui.GeckoWarning+ui.Bold, ui.Reset,
+			ui.GeckoSuccess, succeeded, ui.Reset,
+			ui.GeckoDanger, failed, ui.Reset,
+			ui.GeckoTeal, elapsed.Seconds(), ui.Reset)
+		for _, id := range applyResult.Failed {
+			rType, rName := splitResourceID(string(id))
+			ui.Error(fmt.Sprintf("%s.%s failed to destroy", rType, rName))
+		}
+		fmt.Println()
+	}
+
 	return nil
 }
 
@@ -278,55 +419,96 @@ Displays resource health, provider statuses, recent changes, and workspace info.
 }
 
 func runBask(args []string, flags map[string]string) error {
+	ctx := context.Background()
+
 	ui.PrintBannerSmall("bask")
 
-	spin := ui.NewSpinner("Fetching resource states")
+	workspace := flagVal(flags, "workspace", "dev")
+
+	// 1. Load project for name/workspace info
+	spin := ui.NewSpinner("Loading project")
 	spin.Start()
-	time.Sleep(800 * time.Millisecond)
+	loaded, err := lang.LoadProject(lang.LoadOptions{Workspace: workspace})
+	if err != nil {
+		spin.Stop(false)
+		ui.Error(fmt.Sprintf("Failed to load project: %s", err))
+		return err
+	}
+	spin.Stop(true)
+
+	// 2. Load state
+	spin = ui.NewSpinner("Fetching resource states")
+	spin.Start()
+	backend, berr := state.DefaultLocalBackend()
+	var stackState *core.StackState
+	if berr == nil {
+		stackState, _ = backend.Load(ctx, loaded.Stack.Name, workspace)
+	}
+	if stackState == nil {
+		stackState = &core.StackState{Resources: make(map[core.ResourceID]*core.ResourceState)}
+	}
 	spin.Stop(true)
 	fmt.Println()
 
-	// Project info
+	// 3. Project info
 	ui.Header("Project")
-	ui.Label("Name", "my-homelab")
-	ui.Label("Active Workspace", "dev")
-	ui.Label("Workspaces", "dev, staging, prod")
+	ui.Label("Name", loaded.Stack.Name)
+	ui.Label("Active Workspace", workspace)
 	ui.Label("State Backend", "local")
-	ui.Label("Last Applied", "2 minutes ago")
+	fmt.Println()
 
-	// Provider health
+	// 4. Resources
+	if len(stackState.Resources) == 0 {
+		ui.Info("No resources in state. Run 'gecko grip' to apply your infrastructure.")
+		fmt.Println()
+		return nil
+	}
+
+	// Count by provider
+	providerCounts := make(map[string]int)
+	for _, rs := range stackState.Resources {
+		providerCounts[rs.ProviderID]++
+	}
+
 	ui.Header("Providers")
-	ui.TableHeader("Provider", "Version", "Status", "Resources")
-	ui.TableRow("kubernetes", "v1.29.2", ui.StatusTag("healthy"), "18 managed")
-	ui.TableRow("proxmox", "v8.1.3", ui.StatusTag("healthy"), "4 managed")
-	ui.TableRow("gitea", "v1.21.4", ui.StatusTag("healthy"), "3 managed")
+	ui.TableHeader("Provider", "Status", "Resources")
+	for provider, count := range providerCounts {
+		ui.TableRow(provider, ui.StatusTag("healthy"), fmt.Sprintf("%d managed", count))
+	}
 	fmt.Println()
 
-	// Resource summary by type
-	ui.Header("Resources — dev workspace")
-	ui.TableHeader("Resource", "Provider", "Status", "Drift")
-	ui.TableRow("k8s:namespace.monitoring", "kubernetes", ui.StatusTag("running"), "✓ clean")
-	ui.TableRow("k8s:deployment.prometheus", "kubernetes", ui.StatusTag("running"), "✓ clean")
-	ui.TableRow("k8s:deployment.grafana", "kubernetes", ui.StatusTag("running"), "✓ clean")
-	ui.TableRow("k8s:deployment.api-server", "kubernetes", ui.StatusTag("running"), "✓ clean")
-	ui.TableRow("k8s:service.prometheus-svc", "kubernetes", ui.StatusTag("running"), "✓ clean")
-	ui.TableRow("k8s:service.grafana-svc", "kubernetes", ui.StatusTag("running"), "✓ clean")
-	ui.TableRow("k8s:pvc.grafana-pvc", "kubernetes", ui.StatusTag("running"), "✓ clean")
-	ui.TableRow("k8s:configmap.prometheus-config", "kubernetes", ui.StatusTag("running"), "✓ clean")
-	ui.TableRow("k8s:configmap.app-config", "kubernetes", ui.StatusTag("running"), "✓ clean")
-	ui.TableRow("proxmox:vm.control-plane-01", "proxmox", ui.StatusTag("running"), "✓ clean")
-	ui.TableRow("proxmox:vm.worker-01", "proxmox", ui.StatusTag("running"), "✓ clean")
-	ui.TableRow("proxmox:vm.worker-02", "proxmox", ui.StatusTag("running"), "✓ clean")
-	ui.TableRow("gitea:repo.infra", "gitea", ui.StatusTag("active"), "✓ clean")
+	// 5. Resource table
+	ui.Header(fmt.Sprintf("Resources — %s workspace", workspace))
+	ui.TableHeader("Resource", "Provider", "Status")
+
+	healthy, failed, drifted := 0, 0, 0
+	for id, rs := range stackState.Resources {
+		rType, rName := splitResourceID(string(id))
+		label := fmt.Sprintf("%s.%s", rType, rName)
+		statusStr := string(rs.Status)
+		switch rs.Status {
+		case core.StatusRunning:
+			healthy++
+		case core.StatusFailed:
+			failed++
+			statusStr = "failed"
+		case core.StatusDrifted:
+			drifted++
+			statusStr = "drifted"
+		default:
+			healthy++
+		}
+		ui.TableRow(label, rs.ProviderID, ui.StatusTag(statusStr))
+	}
 	fmt.Println()
 
-	// Health summary
+	// 6. Summary
 	ui.Divider()
-	fmt.Printf("  %s13 resources%s   %s13 healthy%s   %s0 drifted%s   %s0 failed%s\n\n",
-		ui.BrightWhite+ui.Bold, ui.Reset,
-		ui.GeckoSuccess+ui.Bold, ui.Reset,
-		ui.GeckoWarning+ui.Bold, ui.Reset,
-		ui.GeckoDanger+ui.Bold, ui.Reset)
+	fmt.Printf("  %s%d resource(s)%s   %s%d healthy%s   %s%d drifted%s   %s%d failed%s\n\n",
+		ui.BrightWhite+ui.Bold, len(stackState.Resources), ui.Reset,
+		ui.GeckoSuccess+ui.Bold, healthy, ui.Reset,
+		ui.GeckoWarning+ui.Bold, drifted, ui.Reset,
+		ui.GeckoDanger+ui.Bold, failed, ui.Reset)
 
 	return nil
 }

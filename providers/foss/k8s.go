@@ -94,7 +94,8 @@ func (p *Provider) SupportedTypes() []core.ResourceType {
 	return types
 }
 
-// Configure loads the kubeconfig and builds the dynamic client
+// Configure stores provider config. The kube client is built lazily on first use
+// so that `gecko crawl` works even before the cluster exists.
 func (p *Provider) Configure(ctx context.Context, config map[string]interface{}) error {
 	if config != nil {
 		if v, ok := config["kubeconfig"].(string); ok {
@@ -104,10 +105,18 @@ func (p *Provider) Configure(ctx context.Context, config map[string]interface{})
 			p.context_ = v
 		}
 	}
+	return nil
+}
+
+// connect builds the dynamic kube client if it hasn't been built yet.
+// Called lazily from Create/Read/Update/Delete/Import.
+func (p *Provider) connect() error {
+	if p.client != nil {
+		return nil
+	}
 
 	kubeconfigPath := p.kubeconfig
 
-	// Expand ~ to home directory
 	if strings.HasPrefix(kubeconfigPath, "~/") {
 		home, err := os.UserHomeDir()
 		if err != nil {
@@ -116,7 +125,6 @@ func (p *Provider) Configure(ctx context.Context, config map[string]interface{})
 		kubeconfigPath = filepath.Join(home, kubeconfigPath[2:])
 	}
 
-	// Fall back to KUBECONFIG env or default path
 	if kubeconfigPath == "" {
 		if env := os.Getenv("KUBECONFIG"); env != "" {
 			kubeconfigPath = env
@@ -183,6 +191,9 @@ func (p *Provider) resourceClient(resourceType core.ResourceType, ns string) (dy
 
 // Create provisions a new Kubernetes resource
 func (p *Provider) Create(ctx context.Context, args core.ResourceArgs) (*core.ResourceState, error) {
+	if err := p.connect(); err != nil {
+		return nil, err
+	}
 	manifest := buildManifest(args.Type, args.Name, args.Inputs)
 	obj := &unstructured.Unstructured{Object: manifest}
 
@@ -215,6 +226,9 @@ func (p *Provider) Create(ctx context.Context, args core.ResourceArgs) (*core.Re
 
 // Read retrieves the current state of a Kubernetes resource
 func (p *Provider) Read(ctx context.Context, id core.ResourceID, externalID string) (*core.ResourceState, error) {
+	if err := p.connect(); err != nil {
+		return nil, err
+	}
 	// Parse type from ResourceID ("k8s:deployment::nginx" → "k8s:deployment")
 	parts := strings.SplitN(string(id), "::", 2)
 	if len(parts) != 2 {
@@ -255,6 +269,9 @@ func (p *Provider) Read(ctx context.Context, id core.ResourceID, externalID stri
 
 // Update applies changes to an existing Kubernetes resource
 func (p *Provider) Update(ctx context.Context, current *core.ResourceState, desired core.ResourceArgs) (*core.ResourceState, error) {
+	if err := p.connect(); err != nil {
+		return nil, err
+	}
 	ns := getStringInput(desired.Inputs, "namespace", p.namespace)
 	rc, err := p.resourceClient(desired.Type, ns)
 	if err != nil {
@@ -296,6 +313,9 @@ func (p *Provider) Update(ctx context.Context, current *core.ResourceState, desi
 
 // Delete removes a Kubernetes resource
 func (p *Provider) Delete(ctx context.Context, state *core.ResourceState) error {
+	if err := p.connect(); err != nil {
+		return err
+	}
 	ns := getStringInput(state.Inputs, "namespace", p.namespace)
 	rc, err := p.resourceClient(state.Type, ns)
 	if err != nil {
@@ -320,6 +340,9 @@ func (p *Provider) Delete(ctx context.Context, state *core.ResourceState) error 
 
 // Import reads an existing resource into Gecko state
 func (p *Provider) Import(ctx context.Context, resourceType core.ResourceType, externalID string) (*core.ResourceState, error) {
+	if err := p.connect(); err != nil {
+		return nil, err
+	}
 	ns, resName := parseExternalID(externalID, "")
 	if resName == "" {
 		return nil, fmt.Errorf("invalid externalID for import: %s (expected namespace/name)", externalID)

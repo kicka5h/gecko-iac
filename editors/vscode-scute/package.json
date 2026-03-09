@@ -1,0 +1,53 @@
+{
+  "name": "scute",
+  "displayName": "Scute — Gecko IaC",
+  "description": "Syntax highlighting for Scute, the Gecko IaC language (.scute, .snack)",
+  "version": "0.1.0",
+  "publisher": "gecko-iac",
+  "license": "Apache-2.0",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "scute",
+    "gecko",
+    "iac",
+    "infrastructure",
+    "snack"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gecko-iac/gecko"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "scute",
+        "aliases": ["Scute", "scute"],
+        "extensions": [".scute"],
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "snack",
+        "aliases": ["Snack", "snack"],
+        "extensions": [".snack"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "scute",
+        "scopeName": "source.scute",
+        "path": "./syntaxes/scute.tmLanguage.json"
+      },
+      {
+        "language": "snack",
+        "scopeName": "source.scute",
+        "path": "./syntaxes/scute.tmLanguage.json"
+      }
+    ]
+  }
+}
