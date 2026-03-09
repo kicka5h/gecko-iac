@@ -9,8 +9,13 @@ import (
 	"github.com/gecko-iac/gecko/internal/ui"
 )
 
-// CLI version
-const Version = "0.1.0"
+// Version info — set at build time via ldflags
+var (
+	Version  = "0.1.0"
+	Codename = "Amalosia"
+	Commit   = "none"
+	Date     = "unknown"
+)
 
 // Command represents a Gecko CLI subcommand
 type Command struct {
@@ -31,15 +36,6 @@ type Flag struct {
 	Default  string
 	Usage    string
 	Required bool
-}
-
-// rootCmd is the top-level command registry
-var rootCmd = &Command{
-	Name:  "gecko",
-	Short: "🦎 Gecko — FOSS Infrastructure as Code",
-	Long: `Gecko is an open-source Infrastructure as Code framework that prioritizes
-FOSS infrastructure solutions. Manage Kubernetes, Proxmox, Nomad, Gitea,
-and more with a unified, elegant workflow.`,
 }
 
 // allCommands registers every gecko subcommand
@@ -65,7 +61,7 @@ func Execute() error {
 
 	// Handle global flags
 	if args[0] == "--version" || args[0] == "-v" {
-		fmt.Printf("🦎 gecko v%s\n", Version)
+		fmt.Printf("🦎 gecko %s — v%s\n", Codename, Version)
 		return nil
 	}
 
@@ -301,9 +297,11 @@ func init() {
 		Long:  "Display the current Gecko version and build information.",
 		Run: func(args []string, flags map[string]string) error {
 			ui.PrintBannerSmall("version")
-			ui.Label("Version", Version)
-			ui.Label("Runtime", "Go 1.22")
-			ui.Label("License", "Apache 2.0")
+			ui.Label("Release",  fmt.Sprintf("%s — v%s", Codename, Version))
+			ui.Label("Commit",   Commit)
+			ui.Label("Built",    Date)
+			ui.Label("Runtime",  "Go 1.22")
+			ui.Label("License",  "Apache 2.0")
 			ui.Label("Homepage", "https://gecko-iac.dev")
 			fmt.Println()
 			return nil

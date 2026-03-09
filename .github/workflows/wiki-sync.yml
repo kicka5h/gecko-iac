@@ -1,0 +1,40 @@
+name: Sync Wiki
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "wiki/**"
+
+jobs:
+  sync:
+    name: Push wiki/ to GitHub Wiki
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Clone wiki repo
+        run: |
+          git clone "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git" wiki-repo
+
+      - name: Copy wiki pages
+        run: |
+          # Copy all .md files from wiki/ to the wiki repo root
+          cp wiki/*.md wiki-repo/
+
+      - name: Commit and push
+        working-directory: wiki-repo
+        run: |
+          git config user.name  "gecko-bot"
+          git config user.email "bot@gecko-iac.dev"
+          git add -A
+          # Only commit if there are changes
+          if git diff --cached --quiet; then
+            echo "No wiki changes to sync."
+          else
+            git commit -m "sync: wiki from ${{ github.sha }}"
+            git push
+          fi

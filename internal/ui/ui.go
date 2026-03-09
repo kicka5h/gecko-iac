@@ -198,10 +198,9 @@ func PlanSummary(adds, changes, destroys int) {
 
 // Spinner is a simple terminal spinner
 type Spinner struct {
-	frames  []string
-	current int
-	msg     string
-	done    chan struct{}
+	frames []string
+	msg    string
+	done   chan struct{}
 }
 
 // NewSpinner creates a new gecko-themed spinner
@@ -295,7 +294,7 @@ func TableRow(cols ...string) {
 func Confirm(msg string) bool {
 	fmt.Printf("\n  %s%s?%s %s%s%s %s[y/N]%s ", GeckoWarning, Bold, Reset, BrightWhite, msg, Reset, GeckoMuted, Reset)
 	var response string
-	fmt.Scanln(&response)
+	_, _ = fmt.Scanln(&response)
 	response = strings.ToLower(strings.TrimSpace(response))
 	return response == "y" || response == "yes"
 }

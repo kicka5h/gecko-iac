@@ -184,7 +184,7 @@ func runMolt(args []string, flags map[string]string) error {
 		fmt.Printf("  %sType %s%q%s to confirm destruction: ",
 			ui.GeckoMuted, ui.GeckoDanger+ui.Bold, workspace, ui.Reset)
 		var confirm string
-		fmt.Scanln(&confirm)
+		_, _ = fmt.Scanln(&confirm)
 		if confirm != workspace {
 			fmt.Println()
 			ui.Info("Destruction cancelled. Your infrastructure is intact.")

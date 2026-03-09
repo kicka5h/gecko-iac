@@ -129,7 +129,7 @@ func runHatch(args []string, flags map[string]string) error {
 	spin = ui.NewSpinner(fmt.Sprintf("Initializing workspace %q", workspace))
 	spin.Start()
 	time.Sleep(300 * time.Millisecond)
-	os.MkdirAll(filepath.Join(".gecko", "state"), 0700)
+	_ = os.MkdirAll(filepath.Join(".gecko", "state"), 0700)
 	spin.Stop(true)
 
 	fmt.Println()

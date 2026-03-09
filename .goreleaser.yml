@@ -1,0 +1,124 @@
+version: 2
+
+project_name: gecko
+
+before:
+  hooks:
+    - go mod download
+    - go mod verify
+
+builds:
+  - id: gecko
+    main: .
+    binary: gecko
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X github.com/gecko-iac/gecko/cmd.Version={{.Version}}
+      - -X github.com/gecko-iac/gecko/cmd.Codename=Amalosia
+      - -X github.com/gecko-iac/gecko/cmd.Commit={{.Commit}}
+      - -X github.com/gecko-iac/gecko/cmd.Date={{.Date}}
+
+archives:
+  - id: gecko
+    name_template: "gecko_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - LICENSE
+      - scripts/install.sh
+
+checksum:
+  name_template: "gecko_{{ .Version }}_checksums.txt"
+  algorithm: sha256
+
+release:
+  github:
+    owner: gecko-iac
+    name: gecko
+  name_template: "Amalosia — v{{.Version}}"
+  header: |
+    ## 🦎 Amalosia — v{{.Version}}
+
+    ### Install
+
+    **Homebrew (macOS / Linux):**
+    ```bash
+    brew install gecko-iac/gecko/gecko
+    ```
+
+    **curl (macOS / Linux):**
+    ```bash
+    curl -fsSL https://raw.githubusercontent.com/gecko-iac/gecko/main/scripts/install.sh | sh
+    ```
+
+    **Go:**
+    ```bash
+    go install github.com/gecko-iac/gecko@v{{.Version}}
+    ```
+
+    **Windows (PowerShell):**
+    ```powershell
+    irm https://raw.githubusercontent.com/gecko-iac/gecko/main/scripts/install.ps1 | iex
+    ```
+
+brews:
+  - name: gecko
+    repository:
+      owner: gecko-iac
+      name: homebrew-gecko   # tap shorthand: gecko-iac/gecko
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    commit_author:
+      name: gecko-bot
+      email: bot@gecko-iac.dev
+    directory: Formula
+    homepage: "https://gecko-iac.dev"
+    description: "FOSS-first Infrastructure as Code framework with the Scute language"
+    license: "Apache-2.0"
+    caveats: |
+      To get started, create a new Gecko project:
+        gecko hatch my-project
+
+      Documentation: https://gecko-iac.dev/docs
+    test: |
+      system "#{bin}/gecko", "--version"
+    install: |
+      bin.install "gecko"
+
+snapshot:
+  version_template: "Amalosia-{{ .Tag }}-dev"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "Merge pull request"
+      - "Merge branch"
+  groups:
+    - title: "New Features"
+      regexp: "^feat"
+      order: 0
+    - title: "Bug Fixes"
+      regexp: "^fix"
+      order: 1
+    - title: "Providers"
+      regexp: "^provider"
+      order: 2
+    - title: "Other"
+      order: 999

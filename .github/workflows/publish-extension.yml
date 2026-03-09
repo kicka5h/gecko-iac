@@ -1,0 +1,67 @@
+name: Publish Scute Extension
+
+on:
+  push:
+    tags:
+      - "ext/v*"   # trigger on tags like ext/v0.1.0
+
+jobs:
+  publish:
+    name: Package & Publish
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        working-directory: editors/vscode-scute
+        run: npm ci
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#ext/v}" >> $GITHUB_OUTPUT
+
+      - name: Bump package version
+        working-directory: editors/vscode-scute
+        run: npm version ${{ steps.version.outputs.version }} --no-git-tag-version
+
+      - name: Package extension
+        working-directory: editors/vscode-scute
+        run: npm run package
+
+      - name: Upload .vsix artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: scute-${{ steps.version.outputs.version }}.vsix
+          path: editors/vscode-scute/dist/*.vsix
+
+      - name: Publish to VS Marketplace
+        working-directory: editors/vscode-scute
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: npm run publish:vscode
+
+      - name: Publish to Open VSX (Cursor)
+        working-directory: editors/vscode-scute
+        env:
+          OVSX_TOKEN: ${{ secrets.OVSX_TOKEN }}
+        run: npm run publish:ovsx
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Scute Extension — Amalosia v${{ steps.version.outputs.version }}"
+          files: editors/vscode-scute/dist/*.vsix
+          body: |
+            ## Scute VSCode/Cursor Extension v${{ steps.version.outputs.version }}
+
+            Install from the marketplace or download the `.vsix` below.
+
+            **VS Marketplace:** `ext install gecko-iac.scute`
+            **Manual install:** `code --install-extension scute-${{ steps.version.outputs.version }}.vsix`

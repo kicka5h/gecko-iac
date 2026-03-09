@@ -55,25 +55,10 @@ func (p *Parser) curRaw() Token {
 	return p.tokens[p.pos]
 }
 
-func (p *Parser) peek() Token {
-	saved := p.pos
-	p.advance()
-	t := p.cur()
-	p.pos = saved
-	return t
-}
-
 func (p *Parser) advance() Token {
 	t := p.cur()
 	p.pos++
 	return t
-}
-
-func (p *Parser) skip() {
-	for p.pos < len(p.tokens) && p.tokens[p.pos].Type == NEWLINE {
-		p.pos++
-	}
-	p.pos++
 }
 
 func (p *Parser) skipNL() {
@@ -261,8 +246,6 @@ func (p *Parser) parseMark() *MarkDecl {
 	if p.check(COLON) {
 		p.advance()
 		m.Default = p.parseExpr()
-	} else if p.check(NEWLINE) || p.check(EOF) {
-		// no default
 	}
 	return m
 }

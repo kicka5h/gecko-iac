@@ -1,0 +1,59 @@
+name: Provider Request
+description: Request a new FOSS infrastructure provider
+labels: ["provider", "enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Gecko is FOSS-first. Provider requests for open-source infrastructure tools are prioritised.
+
+  - type: input
+    id: name
+    attributes:
+      label: Provider name
+      placeholder: e.g. Forgejo, Nextcloud, Authentik
+    validations:
+      required: true
+
+  - type: input
+    id: homepage
+    attributes:
+      label: Project homepage / repo
+      placeholder: https://github.com/...
+    validations:
+      required: true
+
+  - type: input
+    id: api
+    attributes:
+      label: API / Go client
+      description: Does this project have a REST API or an official Go client library?
+      placeholder: https://pkg.go.dev/...
+
+  - type: textarea
+    id: resources
+    attributes:
+      label: Resource types needed
+      description: List the resource types you'd like Gecko to manage.
+      placeholder: |
+        - forgejo:repo
+        - forgejo:org
+        - forgejo:webhook
+        - forgejo:runner
+    validations:
+      required: true
+
+  - type: textarea
+    id: usecase
+    attributes:
+      label: Use case
+      description: How would you use this provider in a Gecko project?
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Would you be willing to contribute this provider?
+      options:
+        - label: Yes, I'd like to implement this and open a PR

@@ -2,6 +2,8 @@
 
 > *Move fast. Grip hard.*
 
+**Alpha release: Amalosia** — named after *Amalosia*, the first genus in the family Diplodactylidae.
+
 Gecko is a **FOSS-first Infrastructure as Code framework** for teams who believe infrastructure tooling should be open, composable, and opinionated in the best possible ways.
 
 Built in Go. No phone-home telemetry. No proprietary providers. No cloud vendor lock-in.
@@ -27,6 +29,32 @@ Gecko's CLI is themed around gecko anatomy and behavior. Every command maps to s
 | `gecko scale` | `resize` | 📊 Scale resources up/down |
 | `gecko clutch` | `workspace` | 🥚 Manage stacks/workspaces |
 | `gecko cross` | `bridge` | 🌉 Import Terraform/Pulumi state into Scute |
+
+---
+
+## Install
+
+**Homebrew (macOS / Linux):**
+```bash
+brew install gecko-iac/gecko/gecko
+```
+
+**curl (macOS / Linux):**
+```bash
+curl -fsSL https://raw.githubusercontent.com/gecko-iac/gecko/main/scripts/install.sh | sh
+```
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/gecko-iac/gecko/main/scripts/install.ps1 | iex
+```
+
+**Go:**
+```bash
+go install github.com/gecko-iac/gecko@latest
+```
+
+**Download a binary:** [GitHub Releases](https://github.com/gecko-iac/gecko/releases/latest)
 
 ---
 
@@ -67,12 +95,12 @@ my-homelab/
 ├── .geckoignore            # Files to exclude from gecko operations
 ├── stacks/
 │   ├── dev/
-│   │   └── main.go        # Dev workspace stack declaration
+│   │   └── main.scute     # Dev workspace stack declaration
 │   ├── staging/
-│   │   └── main.go
+│   │   └── main.scute
 │   └── prod/
-│       └── main.go
-├── modules/                # Reusable infrastructure modules
+│       └── main.scute
+├── modules/                # Reusable Snack modules
 │   ├── monitoring/
 │   └── networking/
 └── .gecko/
