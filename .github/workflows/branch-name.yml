@@ -1,0 +1,49 @@
+name: Branch Name Check
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+jobs:
+  check-branch-name:
+    name: Validate branch name
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check branch naming convention
+        env:
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          echo "Branch: $BRANCH"
+
+          # Allow main, master, and hotfix/* branches
+          if [[ "$BRANCH" == "main" || "$BRANCH" == "master" ]]; then
+            echo "✓ Base branch — allowed."
+            exit 0
+          fi
+
+          if [[ "$BRANCH" == hotfix/* ]]; then
+            echo "✓ Hotfix branch — allowed."
+            exit 0
+          fi
+
+          # Require pattern: v<semver>/<Codename>-<Milestone>
+          # Examples: v0.1.0/Amalosia-Core, v1.2.3/Belanotus-Networking
+          PATTERN='^v[0-9]+\.[0-9]+\.[0-9]+/[A-Z][a-zA-Z]+-[A-Z][a-zA-Z]+$'
+
+          if echo "$BRANCH" | grep -qE "$PATTERN"; then
+            echo "✓ Branch name '$BRANCH' matches required pattern."
+          else
+            echo ""
+            echo "✗ Branch name '$BRANCH' does not match the required pattern."
+            echo ""
+            echo "  Required format: v<version>/<Codename>-<Milestone>"
+            echo "  Examples:"
+            echo "    v0.1.0/Amalosia-Core"
+            echo "    v0.2.0/Amalosia-Providers"
+            echo "    v1.0.0/Belanotus-Networking"
+            echo ""
+            echo "  Exceptions: main, hotfix/*"
+            echo ""
+            exit 1
+          fi
