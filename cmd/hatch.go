@@ -107,7 +107,7 @@ func runHatch(args []string, flags map[string]string) error {
 
 	// Next steps
 	ui.Header("Next Steps")
-	printStep(1, "Explore your stack:", fmt.Sprintf("gecko run"))
+	printStep(1, "Explore your stack:", "gecko run")
 	printStep(2, "Preview your infrastructure:", "gecko crawl")
 	printStep(3, "Apply your infrastructure:", "gecko grip")
 	printStep(4, "Check status:", "gecko bask")
