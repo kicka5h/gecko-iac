@@ -499,8 +499,15 @@ func (e *Evaluator) evalExpr(node Node) Value {
 		}
 		return left
 	case *RangeExpr:
-		start := int(e.evalExpr(n.Start).(NumberVal).V)
-		end := int(e.evalExpr(n.End).(NumberVal).V)
+		sv := e.evalExpr(n.Start)
+		ev := e.evalExpr(n.End)
+		sn, sok := sv.(NumberVal)
+		en, eok := ev.(NumberVal)
+		if !sok || !eok {
+			e.err(n.Pos, "range expression requires numbers, got %s..%s", sv.valueType(), ev.valueType())
+			return NullVal{}
+		}
+		start, end := int(sn.V), int(en.V)
 		var vals []Value
 		for i := start; i <= end; i++ {
 			vals = append(vals, NumberVal{V: float64(i)})
@@ -776,8 +783,14 @@ func (e *Evaluator) evalFn(n *FunctionCall) Value {
 		}
 		return NumberVal{}
 	case "range":
-		start := int(arg(0).(NumberVal).V)
-		end := int(arg(1).(NumberVal).V)
+		a0, a1 := arg(0), arg(1)
+		sn, sok := a0.(NumberVal)
+		en, eok := a1.(NumberVal)
+		if !sok || !eok {
+			e.err(n.Pos, "range() requires numbers, got %s and %s", a0.valueType(), a1.valueType())
+			return NullVal{}
+		}
+		start, end := int(sn.V), int(en.V)
 		var vals []Value
 		for i := start; i < end; i++ {
 			vals = append(vals, NumberVal{V: float64(i)})
@@ -876,8 +889,6 @@ func (e *Evaluator) evalFn(n *FunctionCall) Value {
 	case "json":
 		return StringVal{V: jsonVal(arg(0))}
 	case "base64":
-		import_b64 := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-		_ = import_b64
 		return StringVal{V: simpleB64(argStr(0))}
 	case "yaml_label":
 		// Formats a map as k: v YAML labels for k8s
