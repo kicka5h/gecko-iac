@@ -86,12 +86,14 @@ func (s *Scope) get(name string) (Value, bool) {
 
 // EvalResult is the output of evaluating a .scute project
 type EvalResult struct {
-	ProjectName string
-	Workspace   string
-	Providers   []ProviderResult
-	Resources   []ResourceResult
-	Outputs     map[string]Value
-	Vars        map[string]Value
+	ProjectName   string
+	Workspace     string
+	Providers     []ProviderResult
+	Resources     []ResourceResult
+	Outputs       map[string]Value
+	Vars          map[string]Value
+	BackendType   string                 // from store block, e.g. "local", "s3"
+	BackendConfig map[string]interface{} // from store block fields
 }
 
 // ProviderResult is an evaluated provider configuration
@@ -173,6 +175,8 @@ func (e *Evaluator) evalTop(node Node) {
 		e.evalCamouflage(n)
 	case *SignalBlock:
 		e.evalSignal(n)
+	case *StoreBlock:
+		e.evalStore(n)
 	case *SnackImport:
 		inst, err := e.EvalSnack(n)
 		if err != nil {
@@ -210,6 +214,15 @@ func (e *Evaluator) evalHabitat(b *HabitatBlock) {
 		Name:   b.Name,
 		Config: config,
 	})
+}
+
+func (e *Evaluator) evalStore(b *StoreBlock) {
+	e.result.BackendType = b.Type
+	cfg := make(map[string]interface{})
+	for _, f := range b.Fields {
+		cfg[f.Key] = toInterface(e.evalExpr(f.Value))
+	}
+	e.result.BackendConfig = cfg
 }
 
 func (e *Evaluator) evalMark(m *MarkDecl) {

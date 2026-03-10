@@ -2,6 +2,9 @@ territory "k8s-homelab"
   workspace: "dev"
 end
 
+store "local"
+end
+
 habitat "kind"
 end
 

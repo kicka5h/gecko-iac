@@ -91,16 +91,13 @@ Flags:
 
 ## gecko bask
 
-Show infrastructure status dashboard.
+Show infrastructure status dashboard. Gecko automatically discovers the project by searching up and down from the current directory — no need to be at the project root.
 
 ```bash
 gecko bask [flags]
 
 Flags:
   --workspace, -w   Target workspace (default: dev)
-  --dir, -d         Project directory (default: .)
-  --outputs         Show stack signal outputs
-  --json            Output status as JSON
 ```
 
 ## gecko tail
@@ -163,10 +160,10 @@ Import existing Terraform or Pulumi state into Scute.
 
 ```bash
 # From Terraform state
-gecko cross --from terraform.tfstate --out stacks/dev/main.scute
+gecko cross --from terraform.tfstate --out dev/main.scute
 
 # From Pulumi stack state
-gecko cross --from .pulumi/stacks/dev.json --out stacks/dev/main.scute
+gecko cross --from .pulumi/stacks/dev.json --out dev/main.scute
 
 # Preview to stdout
 gecko cross --from terraform.tfstate

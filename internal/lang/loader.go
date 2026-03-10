@@ -2,6 +2,7 @@ package lang
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,6 +23,9 @@ type LoadedStack struct {
 	ProviderHints []ProviderResult
 	Outputs       map[string]Value
 	Errors        []error
+	BackendType   string                 // "local", "s3", "etcd", "postgres" — from store block
+	BackendConfig map[string]interface{} // backend-specific config fields
+	ProjectDir    string                 // absolute path to the project root
 }
 
 // LoadProject finds, parses, and evaluates all .scute files for a workspace,
@@ -89,6 +93,10 @@ func LoadProject(opts LoadOptions) (*LoadedStack, error) {
 		}
 		merged.Providers = append(merged.Providers, result.Providers...)
 		merged.Resources = append(merged.Resources, result.Resources...)
+		if result.BackendType != "" {
+			merged.BackendType = result.BackendType
+			merged.BackendConfig = result.BackendConfig
+		}
 		for k, v := range result.Outputs {
 			merged.Outputs[k] = v
 		}
@@ -120,24 +128,30 @@ func LoadProject(opts LoadOptions) (*LoadedStack, error) {
 		Stack:         stack,
 		ProviderHints: merged.Providers,
 		Outputs:       merged.Outputs,
+		BackendType:   merged.BackendType,
+		BackendConfig: merged.BackendConfig,
+		ProjectDir:    dir,
 	}, nil
 }
 
-// FindProjectRoot walks up from cwd looking for gecko.json or *.scute files
+// FindProjectRoot locates the Gecko project root from the current working directory.
+// It searches in two passes:
+//  1. Walk UP the directory tree — handles running gecko from inside a project subtree.
+//  2. Walk DOWN into subdirectories — handles running gecko from a parent directory.
+//
+// A directory is a project root if it contains a .gecko/ directory, a gecko.json
+// (legacy), or any *.scute file directly inside it.
 func FindProjectRoot() (string, error) {
-	dir, err := os.Getwd()
+	cwd, err := os.Getwd()
 	if err != nil {
 		return "", err
 	}
+
+	// Pass 1: walk up
+	dir := cwd
 	for {
-		if _, err := os.Stat(filepath.Join(dir, "gecko.json")); err == nil {
+		if isProjectRoot(dir) {
 			return dir, nil
-		}
-		entries, _ := os.ReadDir(dir)
-		for _, e := range entries {
-			if !e.IsDir() && strings.HasSuffix(e.Name(), ".scute") {
-				return dir, nil
-			}
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
@@ -145,37 +159,111 @@ func FindProjectRoot() (string, error) {
 		}
 		dir = parent
 	}
-	return "", fmt.Errorf("could not find a Gecko project root (no gecko.json or .scute files)")
+
+	// Pass 2: walk down into immediate subdirectories of cwd only (depth=1 then recurse
+	// into promising dirs, skipping known large/irrelevant trees).
+	found := ""
+	_ = filepath.WalkDir(cwd, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || found != "" {
+			return nil
+		}
+		if !d.IsDir() || path == cwd {
+			return nil
+		}
+		// Skip directories that are never project roots
+		switch d.Name() {
+		case ".git", ".github", "node_modules", "vendor", "dist", "build",
+			"__pycache__", ".cache", ".idea", ".vscode", "target", "out":
+			return filepath.SkipDir
+		}
+		if isProjectRoot(path) {
+			found = path
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	if found != "" {
+		return found, nil
+	}
+
+	return "", fmt.Errorf("no Gecko project found in %s or any subdirectory\n  Run 'gecko hatch <name>' to create one", cwd)
 }
 
-// FindScuteFiles returns the ordered list of .scute files to evaluate
+func isProjectRoot(dir string) bool {
+	// .gecko/ directory — created by gecko hatch, directory-name-agnostic anchor
+	if info, err := os.Stat(filepath.Join(dir, ".gecko")); err == nil && info.IsDir() {
+		return true
+	}
+	// gecko.json — legacy support
+	if _, err := os.Stat(filepath.Join(dir, "gecko.json")); err == nil {
+		return true
+	}
+	// Any .scute file directly in this directory
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".scute") {
+			return true
+		}
+	}
+	return false
+}
+
+// FindScuteFiles returns the ordered list of .scute files to evaluate for
+// the given workspace. It searches only immediate subdirectories of the
+// project root for a directory whose name matches the workspace, then falls
+// back to .scute files directly in the project root.
 func FindScuteFiles(projectDir, workspace string) ([]string, error) {
+	entries, err := os.ReadDir(projectDir)
+	if err != nil {
+		return nil, err
+	}
+
+	// Pass 1: look for an immediate subdirectory named after the workspace.
+	// Supports layouts like: dev/, stacks/dev/, envs/dev/, workspaces/dev/
+	for _, e := range entries {
+		if !e.IsDir() || e.Name() == ".gecko" {
+			continue
+		}
+		candidate := filepath.Join(projectDir, e.Name())
+		// Direct match: <projectDir>/dev/
+		if e.Name() == workspace {
+			return scuteFilesIn(candidate), nil
+		}
+		// One level deeper: <projectDir>/<parent>/dev/
+		if sub, err := os.ReadDir(candidate); err == nil {
+			for _, s := range sub {
+				if s.IsDir() && s.Name() == workspace {
+					if files := scuteFilesIn(filepath.Join(candidate, s.Name())); len(files) > 0 {
+						return files, nil
+					}
+				}
+			}
+		}
+	}
+
+	// Pass 2: fall back to .scute files directly in the project root.
 	var files []string
-
-	// Priority 1: stacks/<workspace>/*.scute
-	stackDir := filepath.Join(projectDir, "stacks", workspace)
-	if entries, err := os.ReadDir(stackDir); err == nil {
-		for _, e := range entries {
-			if !e.IsDir() && strings.HasSuffix(e.Name(), ".scute") {
-				files = append(files, filepath.Join(stackDir, e.Name()))
-			}
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".scute") {
+			files = append(files, filepath.Join(projectDir, e.Name()))
 		}
 	}
-
-	// Priority 2: project root *.scute
-	if len(files) == 0 {
-		entries, err := os.ReadDir(projectDir)
-		if err != nil {
-			return nil, err
-		}
-		for _, e := range entries {
-			if !e.IsDir() && strings.HasSuffix(e.Name(), ".scute") {
-				files = append(files, filepath.Join(projectDir, e.Name()))
-			}
-		}
-	}
-
 	return files, nil
+}
+
+// scuteFilesIn returns all .scute files directly inside dir.
+func scuteFilesIn(dir string) []string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var files []string
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".scute") {
+			files = append(files, filepath.Join(dir, e.Name()))
+		}
+	}
+	return files
 }
 
 // ─── Formatter ────────────────────────────────────────────────────────────────
@@ -264,6 +352,13 @@ func (f *formatter) writeNode(node Node) {
 		for _, w := range n.Whens {
 			f.writeWhen(w)
 		}
+		f.depth--
+		f.line("end")
+
+	case *StoreBlock:
+		f.line(fmt.Sprintf("store %q", n.Type))
+		f.depth++
+		f.writeFields(n.Fields)
 		f.depth--
 		f.line("end")
 

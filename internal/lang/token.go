@@ -70,6 +70,7 @@ const (
 	UNLESS     // unless     → negative conditional
 	ELSE       // else       → alternative branch in when/unless
 	PROTECTED  // protected  → marks a spawn as destroy-protected
+	STORE      // store      → state backend configuration block
 
 	// ── Snack Module System ───────────────────────────────────────────────────
 	SNACK  // snack  — consume a module: snack "name" from "path/url"
@@ -123,6 +124,7 @@ var tokenNames = map[TokenType]string{
 	AS: "as", ACROSS: "across", ITEM: "item", MARK: "mark",
 	CAMOUFLAGE: "camouflage", SIGNAL: "signal", NEEDS: "needs",
 	END: "end", WHEN: "when", UNLESS: "unless", ELSE: "else", PROTECTED: "protected",
+	STORE: "store",
 	TYPE_STRING: "string", TYPE_NUMBER: "number", TYPE_BOOL: "bool",
 	TYPE_LIST: "list", TYPE_MAP: "map", TYPE_ANY: "any",
 	COLON: ":", PIPE: "|", AT: "@",
@@ -174,6 +176,7 @@ var keywords = map[string]TokenType{
 	"export":     EXPORT,
 	"param":      PARAM,
 	"emit":       EMIT,
+	"store":      STORE,
 }
 
 func LookupIdent(ident string) TokenType {

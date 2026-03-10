@@ -2,13 +2,16 @@ territory "vault-nomad"
   workspace: "dev"
 end
 
+store "local"
+end
+
 habitat "vault"
   address: "http://127.0.0.1:8200"
-  token:   "root"
+  token:   env("VAULT_TOKEN") | "root"
 end
 
 habitat "nomad"
-  address: "http://127.0.0.1:4646"
+  address: env("NOMAD_ADDR") | "http://127.0.0.1:4646"
 end
 
 // ─── Marks ────────────────────────────────────────────────────────────────────

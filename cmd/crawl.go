@@ -120,24 +120,12 @@ func runCrawl(args []string, flags map[string]string) error {
 	// 3. Load state backend
 	spin = ui.NewSpinner("Loading current state")
 	spin.Start()
-	backend, err := state.DefaultLocalBackend()
-	if err != nil {
-		spin.Stop(false)
-		ui.Warn(fmt.Sprintf("Could not load state backend: %s (continuing with empty state)", err))
-		backend = nil
-	} else {
-		spin.Stop(true)
-	}
+	stateBackend, _ := loadBackend(loaded)
+	spin.Stop(true)
 
 	// 4. Create engine and run plan
 	spin = ui.NewSpinner("Computing resource dependency graph")
 	spin.Start()
-	var stateBackend core.StateBackend
-	if backend != nil {
-		stateBackend = backend
-	} else {
-		stateBackend = &emptyStateBackend{}
-	}
 	engine := core.NewEngine(loaded.Stack, stateBackend)
 	spin.Stop(true)
 
@@ -293,4 +281,18 @@ func (e *emptyStateBackend) Lock(_ context.Context, _, _ string) (string, error)
 
 func (e *emptyStateBackend) Unlock(_ context.Context, _, _, _ string) error {
 	return nil
+}
+
+// loadBackend returns a state backend based on the store block in the loaded
+// stack, falling back to the default local backend, then an empty no-op backend.
+func loadBackend(loaded *lang.LoadedStack) (core.StateBackend, string) {
+	switch loaded.BackendType {
+	case "", "local":
+		if b, err := state.DefaultLocalBackend(); err == nil {
+			return b, "local"
+		}
+	}
+	// Non-local backends are not yet implemented — fall through to empty.
+	// Future: wire s3, etcd, postgres backends here.
+	return &emptyStateBackend{}, loaded.BackendType
 }

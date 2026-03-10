@@ -11,7 +11,6 @@ import (
 
 	"github.com/gecko-iac/gecko/internal/core"
 	"github.com/gecko-iac/gecko/internal/lang"
-	"github.com/gecko-iac/gecko/internal/state"
 	"github.com/gecko-iac/gecko/internal/ui"
 	k8sprovider "github.com/gecko-iac/gecko/providers/foss"
 )
@@ -115,16 +114,8 @@ func runGrip(args []string, flags map[string]string) error {
 	// 3. Load state backend
 	spin = ui.NewSpinner("Loading current state")
 	spin.Start()
-	backend, berr := state.DefaultLocalBackend()
-	var stateBackend core.StateBackend
-	if berr != nil {
-		spin.Stop(false)
-		ui.Warn(fmt.Sprintf("Could not load state backend: %s (continuing with empty state)", berr))
-		stateBackend = &emptyStateBackend{}
-	} else {
-		spin.Stop(true)
-		stateBackend = backend
-	}
+	stateBackend, _ := loadBackend(loaded)
+	spin.Stop(true)
 
 	// 4. Build engine
 	engine := core.NewEngine(loaded.Stack, stateBackend)

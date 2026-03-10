@@ -8,7 +8,6 @@ import (
 
 	"github.com/gecko-iac/gecko/internal/core"
 	"github.com/gecko-iac/gecko/internal/lang"
-	"github.com/gecko-iac/gecko/internal/state"
 	"github.com/gecko-iac/gecko/internal/ui"
 	k8sprovider "github.com/gecko-iac/gecko/providers/foss"
 )
@@ -111,16 +110,8 @@ func runMolt(args []string, flags map[string]string) error {
 	// 3. Load state backend
 	spin = ui.NewSpinner("Loading current state")
 	spin.Start()
-	backend, berr := state.DefaultLocalBackend()
-	var stateBackend core.StateBackend
-	if berr != nil {
-		spin.Stop(false)
-		ui.Warn(fmt.Sprintf("Could not load state backend: %s (continuing with empty state)", berr))
-		stateBackend = &emptyStateBackend{}
-	} else {
-		spin.Stop(true)
-		stateBackend = backend
-	}
+	stateBackend, _ := loadBackend(loaded)
+	spin.Stop(true)
 
 	// 4. Build destroy plan — all graph resources in reverse topological order
 	spin = ui.NewSpinner("Building destroy plan")
@@ -426,35 +417,26 @@ func runBask(args []string, flags map[string]string) error {
 	workspace := flagVal(flags, "workspace", "dev")
 
 	// 1. Load project for name/workspace info
-	spin := ui.NewSpinner("Loading project")
-	spin.Start()
 	loaded, err := lang.LoadProject(lang.LoadOptions{Workspace: workspace})
 	if err != nil {
-		spin.Stop(false)
-		ui.Error(fmt.Sprintf("Failed to load project: %s", err))
+		ui.Error(fmt.Sprintf("No Gecko project found: %s", err))
 		return err
 	}
-	spin.Stop(true)
 
 	// 2. Load state
-	spin = ui.NewSpinner("Fetching resource states")
-	spin.Start()
-	backend, berr := state.DefaultLocalBackend()
-	var stackState *core.StackState
-	if berr == nil {
-		stackState, _ = backend.Load(ctx, loaded.Stack.Name, workspace)
-	}
+	stateBackend, backendType := loadBackend(loaded)
+	stackState, _ := stateBackend.Load(ctx, loaded.Stack.Name, workspace)
 	if stackState == nil {
 		stackState = &core.StackState{Resources: make(map[core.ResourceID]*core.ResourceState)}
 	}
-	spin.Stop(true)
 	fmt.Println()
 
 	// 3. Project info
 	ui.Header("Project")
 	ui.Label("Name", loaded.Stack.Name)
+	ui.Label("Directory", loaded.ProjectDir)
 	ui.Label("Active Workspace", workspace)
-	ui.Label("State Backend", "local")
+	ui.Label("State Backend", backendType)
 	fmt.Println()
 
 	// 4. Resources
