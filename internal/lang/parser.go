@@ -138,10 +138,12 @@ func (p *Parser) parseTopLevel() Node {
 		return p.parseCamouflage()
 	case SIGNAL:
 		return p.parseSignal()
+	case STORE:
+		return p.parseStore()
 	case SNACK:
 		return p.parseSnackImport()
 	default:
-		p.errorf(t, "unexpected %q at top level — expected territory, habitat, spawn, mark, camouflage, signal, or snack", t.Literal)
+		p.errorf(t, "unexpected %q at top level — expected territory, habitat, spawn, mark, camouflage, signal, store, or snack", t.Literal)
 		p.advance()
 		return nil
 	}
@@ -293,6 +295,18 @@ func (p *Parser) parseSignal() *SignalBlock {
 		p.skipNL()
 	}
 	p.expect(END)
+	return b
+}
+
+func (p *Parser) parseStore() *StoreBlock {
+	tok := p.advance() // store
+	b := &StoreBlock{Pos: p.posOf(tok)}
+	if p.check(STRING) {
+		b.Type = p.advance().Literal
+	} else if p.check(IDENT) {
+		b.Type = p.advance().Literal
+	}
+	b.Fields = p.parseFieldsUntilEnd()
 	return b
 }
 

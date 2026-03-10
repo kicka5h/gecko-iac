@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gecko-iac/gecko/internal/config"
 	"github.com/gecko-iac/gecko/internal/ui"
 )
 
@@ -18,15 +17,15 @@ var hatchCmd = &Command{
 	Long: `gecko hatch initializes a new infrastructure project in the current directory.
 Like a gecko hatching from an egg, this is where your infrastructure is born.
 
-Creates gecko.json, example stack files, and provider configurations based
-on your selected FOSS infrastructure stack.`,
+Creates a .scute stack file and project layout based on your selected
+FOSS infrastructure stack. No external config files required.`,
 	Args: []string{"project-name"},
 	Flags: []Flag{
 		{Name: "runtime", Short: "r", Default: "scute", Usage: "Stack runtime: go, python, typescript, hcl"},
 		{Name: "providers", Short: "p", Default: "k8s", Usage: "Comma-separated providers: k8s, proxmox, nomad, gitea, minio, vault"},
 		{Name: "workspace", Short: "w", Default: "dev", Usage: "Initial workspace name"},
 		{Name: "backend", Short: "b", Default: "local", Usage: "State backend: local, s3, gcs, etcd, postgres"},
-		{Name: "force", Short: "f", Default: "false", Usage: "Overwrite existing gecko.json"},
+		{Name: "force", Short: "f", Default: "false", Usage: "Overwrite existing project"},
 		{Name: "template", Short: "t", Default: "", Usage: "Bootstrap from a template: k8s-homelab, proxmox-cluster, gitops"},
 	},
 	Run: runHatch,
@@ -52,8 +51,8 @@ func runHatch(args []string, flags map[string]string) error {
 	template := flagVal(flags, "template", "")
 
 	// Check for existing project
-	if _, err := os.Stat("gecko.json"); err == nil && !flagSet(flags, "force") {
-		ui.Warn("gecko.json already exists. Use --force to reinitialize.")
+	if _, err := os.Stat(".gecko"); err == nil && !flagSet(flags, "force") {
+		ui.Warn("Project already exists (.gecko/ directory found). Use --force to reinitialize.")
 		return nil
 	}
 
@@ -72,46 +71,11 @@ func runHatch(args []string, flags map[string]string) error {
 	}
 	fmt.Println()
 
-	// Build provider configs
-	providerConfigs := make(map[string]config.ProviderConfig)
-	for _, p := range providers {
-		p = strings.TrimSpace(p)
-		providerConfigs[p] = defaultProviderConfig(p)
-	}
-
-	cfg := &config.ProjectConfig{
-		Name:       projectName,
-		Runtime:    runtime,
-		Workspace:  workspace,
-		Workspaces: []string{"dev", "staging", "prod"},
-		Providers:  providerConfigs,
-		Backend: config.BackendConfig{
-			Type:   backend,
-			Config: defaultBackendConfig(backend),
-		},
-		Tags: map[string]string{
-			"managed-by": "gecko",
-			"project":    projectName,
-			"created-at": time.Now().Format("2006-01-02"),
-		},
-	}
-
-	// Step 1: Write gecko.json
-	spin := ui.NewSpinner("Writing gecko.json")
-	spin.Start()
-	time.Sleep(400 * time.Millisecond)
-	if err := config.SaveProject(".", cfg); err != nil {
-		spin.Stop(false)
-		ui.Error(fmt.Sprintf("Failed to write gecko.json: %v", err))
-		return err
-	}
-	spin.Stop(true)
-
-	// Step 2: Create stack directory
-	spin = ui.NewSpinner("Creating stack layout")
+	// Step 1: Create stack directory and .gecko anchor
+	spin := ui.NewSpinner("Creating project layout")
 	spin.Start()
 	time.Sleep(350 * time.Millisecond)
-	if err := createProjectLayout(projectName, runtime, providers, workspace); err != nil {
+	if err := createProjectLayout(projectName, runtime, providers, workspace, backend); err != nil {
 		spin.Stop(false)
 		ui.Error(fmt.Sprintf("Failed to create project layout: %v", err))
 		return err
@@ -143,7 +107,7 @@ func runHatch(args []string, flags map[string]string) error {
 
 	// Next steps
 	ui.Header("Next Steps")
-	printStep(1, "Explore your stack:", fmt.Sprintf("cat stacks/%s/main.go", workspace))
+	printStep(1, "Explore your stack:", "gecko run")
 	printStep(2, "Preview your infrastructure:", "gecko crawl")
 	printStep(3, "Apply your infrastructure:", "gecko grip")
 	printStep(4, "Check status:", "gecko bask")
@@ -157,11 +121,11 @@ func printStep(n int, label, cmd string) {
 	fmt.Printf("     %sgecko %s%s\n", ui.GeckoMuted, cmd, ui.Reset)
 }
 
-func createProjectLayout(name, runtime string, providers []string, workspace string) error {
+func createProjectLayout(name, runtime string, providers []string, workspace, backend string) error {
 	dirs := []string{
-		"stacks/" + workspace,
-		"stacks/staging",
-		"stacks/prod",
+		workspace,
+		"staging",
+		"prod",
 		"modules",
 		".gecko/state",
 		".gecko/plans",
@@ -173,9 +137,9 @@ func createProjectLayout(name, runtime string, providers []string, workspace str
 	}
 
 	// Write example stack file based on runtime
-	stackContent := generateStackFile(name, runtime, providers, workspace)
+	stackContent := generateStackFile(name, runtime, providers, workspace, backend)
 	mainFile := mainFileName(runtime)
-	return os.WriteFile(filepath.Join("stacks", workspace, mainFile), []byte(stackContent), 0644)
+	return os.WriteFile(filepath.Join(workspace, mainFile), []byte(stackContent), 0644)
 }
 
 func mainFileName(runtime string) string {
@@ -193,10 +157,10 @@ func mainFileName(runtime string) string {
 	}
 }
 
-func generateStackFile(name, runtime string, providers []string, workspace string) string {
+func generateStackFile(name, runtime string, providers []string, workspace, backend string) string {
 	switch runtime {
 	case "scute", "":
-		return generateScuteStack(name, providers, workspace)
+		return generateScuteStack(name, providers, workspace, backend)
 	case "python":
 		return fmt.Sprintf(`import gecko
 
@@ -324,75 +288,6 @@ func tsProviders(providers []string) string {
 	return strings.Join(lines, "\n") + "\n\n"
 }
 
-func defaultProviderConfig(provider string) config.ProviderConfig {
-	switch provider {
-	case "k8s", "kubernetes":
-		return config.ProviderConfig{
-			Type:    "kubernetes",
-			Version: ">=1.28",
-			Config:  map[string]interface{}{"kubeconfig": "~/.kube/config"},
-		}
-	case "proxmox":
-		return config.ProviderConfig{
-			Type:    "proxmox",
-			Version: ">=8.0",
-			Config:  map[string]interface{}{"endpoint": "https://proxmox.local:8006", "insecure": false},
-		}
-	case "nomad":
-		return config.ProviderConfig{
-			Type:    "nomad",
-			Version: ">=1.7",
-			Config:  map[string]interface{}{"address": "http://nomad.service.consul:4646"},
-		}
-	case "gitea":
-		return config.ProviderConfig{
-			Type:    "gitea",
-			Version: ">=1.21",
-			Config:  map[string]interface{}{"server_url": "https://gitea.local"},
-		}
-	case "minio":
-		return config.ProviderConfig{
-			Type:   "minio",
-			Config: map[string]interface{}{"endpoint": "minio.local:9000", "use_ssl": true},
-		}
-	case "vault":
-		return config.ProviderConfig{
-			Type:   "vault",
-			Config: map[string]interface{}{"address": "https://vault.local:8200"},
-		}
-	default:
-		return config.ProviderConfig{Type: provider}
-	}
-}
-
-func defaultBackendConfig(backend string) map[string]interface{} {
-	switch backend {
-	case "s3":
-		return map[string]interface{}{
-			"bucket": "gecko-state",
-			"region": "us-east-1",
-			"prefix": "gecko/state/",
-		}
-	case "gcs":
-		return map[string]interface{}{
-			"bucket": "gecko-state",
-			"prefix": "gecko/state/",
-		}
-	case "etcd":
-		return map[string]interface{}{
-			"endpoints": []string{"http://etcd:2379"},
-			"prefix":    "/gecko/state/",
-		}
-	case "postgres":
-		return map[string]interface{}{
-			"dsn":   "postgres://gecko:gecko@localhost/geckostate",
-			"table": "gecko_state",
-		}
-	default:
-		return nil
-	}
-}
-
 func writeGeckoIgnore() {
 	content := `# Gecko ignore file
 # Files and directories to exclude from gecko operations
@@ -443,7 +338,7 @@ func applyTemplate(template, name string, providers []string) {
 }
 
 
-func generateScuteStack(name string, providers []string, workspace string) string {
+func generateScuteStack(name string, providers []string, workspace, backend string) string {
 	var habitats strings.Builder
 	var spawns strings.Builder
 
@@ -591,6 +486,10 @@ territory "%s"
   workspace: env("GECKO_WORKSPACE") | "%s"
 end
 
+# ─── Store (state backend) ────────────────────────────────────────────────────
+store "%s"
+end
+
 # ─── Habitats (providers) ─────────────────────────────────────────────────────
 %s
 # ─── Marks (variables) ────────────────────────────────────────────────────────
@@ -628,5 +527,5 @@ signal "app"
   value:       app_name
   description: "Application name"
 end
-`, name, workspace, name, workspace, habitats.String(), name, workspace, spawns.String())
+`, name, workspace, name, workspace, backend, habitats.String(), name, workspace, spawns.String())
 }

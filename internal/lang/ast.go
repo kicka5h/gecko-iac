@@ -124,6 +124,21 @@ type SignalBlock struct {
 func (b *SignalBlock) nodePos() Pos       { return b.Pos }
 func (b *SignalBlock) nodeString() string { return fmt.Sprintf("signal %q", b.Name) }
 
+// StoreBlock configures the state backend
+//
+//	store "s3"
+//	  endpoint: "https://minio.local:9000"
+//	  bucket:   "gecko-state"
+//	end
+type StoreBlock struct {
+	Pos    Pos
+	Type   string // "local", "s3", "etcd", "postgres"
+	Fields []*Field
+}
+
+func (b *StoreBlock) nodePos() Pos       { return b.Pos }
+func (b *StoreBlock) nodeString() string { return fmt.Sprintf("store %q", b.Type) }
+
 // ─── Sub-structures ───────────────────────────────────────────────────────────
 
 // Field is a key: value pair inside any block

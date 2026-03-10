@@ -4,10 +4,11 @@ Scute (`.scute`) is Gecko's declarative configuration language. It is whitespace
 
 ## File structure
 
-A Scute file has four top-level sections, in any order:
+A Scute file has these top-level sections, in any order:
 
 ```
 territory   — stack identity and workspace
+store       — state backend configuration
 habitat     — provider configuration
 mark        — input variables
 camouflage  — computed locals
@@ -31,9 +32,43 @@ The `workspace` value is also available as the built-in variable `workspace` thr
 
 ---
 
+## store — state backend
+
+Declares where Gecko stores state. Replaces the `backend` key in `gecko.json`.
+
+```scute
+# Local disk (default)
+store "local"
+end
+
+# S3-compatible (MinIO, AWS S3, Cloudflare R2)
+store "s3"
+  endpoint:   "https://minio.local:9000"
+  bucket:     "gecko-state"
+  prefix:     "my-homelab/"
+  access_key: env("MINIO_ACCESS_KEY")
+  secret_key: env("MINIO_SECRET_KEY")
+end
+
+# PostgreSQL
+store "postgres"
+  connection_string: env("GECKO_STATE_DSN")
+  table:             "gecko_state"
+end
+```
+
+| Type | Description |
+|---|---|
+| `local` | Files at `~/.gecko/state/` |
+| `s3` | S3-compatible object storage |
+| `etcd` | etcd key-value store |
+| `postgres` | PostgreSQL table |
+
+---
+
 ## habitat
 
-Configures a provider. The string after `habitat` is the provider name, which must match a key in `gecko.json`.
+Configures a provider. The string after `habitat` is the provider name (`k8s`, `vault`, `nomad`, etc.).
 
 ```scute
 habitat "k8s"

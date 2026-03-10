@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -145,9 +146,16 @@ func runRun(args []string, flags map[string]string) error {
 	if len(args) > 0 {
 		file = args[0]
 	} else {
-		for _, candidate := range []string{"main.scute", "stacks/dev/main.scute"} {
-			if _, err := os.Stat(candidate); err == nil { file = candidate; break }
-		}
+		// Walk current directory tree looking for any .scute file
+		_ = filepath.WalkDir(".", func(path string, d fs.DirEntry, err error) error {
+			if err != nil || file != "" {
+				return nil
+			}
+			if !d.IsDir() && strings.HasSuffix(d.Name(), ".scute") {
+				file = path
+			}
+			return nil
+		})
 	}
 	if file == "" {
 		ui.Error("No .scute file specified and no main.scute found.")

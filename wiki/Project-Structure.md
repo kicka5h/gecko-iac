@@ -4,65 +4,57 @@ After `gecko hatch`, your project looks like:
 
 ```
 my-homelab/
-├── gecko.json              # Project config: providers, backend, workspaces
-├── .geckoignore            # Files to exclude from gecko operations
-├── stacks/
-│   ├── dev/
-│   │   └── main.scute     # Dev workspace stack declaration
-│   ├── staging/
-│   │   └── main.scute
-│   └── prod/
-│       └── main.scute
+├── dev/
+│   └── main.scute          # Dev workspace stack declaration
+├── staging/
+│   └── main.scute
+├── prod/
+│   └── main.scute
 ├── modules/                # Reusable Snack modules
 │   ├── monitoring/
 │   │   └── main.snack
 │   └── networking/
 │       └── main.snack
+├── .geckoignore            # Files to exclude from gecko operations
 └── .gecko/                 # Gecko runtime data (gitignore this)
     ├── state/              # Local state files
     └── plans/              # Saved crawl plans
 ```
 
-## gecko.json
+Gecko is **directory-name agnostic** — it finds your project by looking for `.gecko/` or any `.scute` file, regardless of where the files live. The workspace name (e.g. `dev`) determines which subdirectory is loaded, not a hardcoded `stacks/` prefix. All of the following layouts work:
 
-The project manifest. Configures providers and the state backend:
-
-```json
-{
-  "name": "my-homelab",
-  "workspaces": ["dev", "staging", "prod"],
-  "providers": {
-    "kind": { "type": "kind" },
-    "k8s": {
-      "type": "kubernetes",
-      "config": {
-        "kubeconfig": "~/.kube/config"
-      }
-    },
-    "vault": {
-      "type": "vault",
-      "config": {
-        "address": "https://vault.local:8200"
-      }
-    }
-  },
-  "backend": {
-    "type": "local"
-  }
-}
+```
+dev/main.scute
+stacks/dev/main.scute
+envs/dev/main.scute
+workspaces/dev/main.scute
 ```
 
 ## Stacks
 
-Each workspace has its own `.scute` file under `stacks/<workspace>/`. The workspace name is available as a built-in variable inside the stack.
+Each workspace has its own `.scute` file in a directory named after that workspace. The workspace name is available as a built-in variable inside the stack.
 
 Multiple `.scute` files in the same workspace directory are merged — useful for splitting large stacks:
 
 ```
-stacks/prod/
+prod/
 ├── main.scute        # territory + habitats + variables
 ├── monitoring.scute  # Prometheus, Grafana
 └── networking.scute  # Ingress, certs, DNS
+```
+
+## Configuring Providers and Backend
+
+Everything lives in `.scute` files — there is no separate `gecko.json`. Providers are declared with `habitat` blocks and the state backend with a `store` block:
+
+```scute
+store "local"
+end
+
+habitat "k8s"
+  kubeconfig: env("KUBECONFIG") | "~/.kube/config"
+  context:    env("KUBE_CONTEXT") | "homelab"
+end
 ```
 
 ## Modules (Snack)
@@ -77,19 +69,14 @@ State is stored per stack + workspace. With the default local backend:
 ~/.gecko/state/<project>.<workspace>.json
 ```
 
-To use a remote backend (required for teams), configure it in `gecko.json`:
+To use a remote backend, set it in your `store` block:
 
-```json
-{
-  "backend": {
-    "type": "s3",
-    "config": {
-      "endpoint": "https://minio.local:9000",
-      "bucket":   "gecko-state",
-      "prefix":   "my-homelab/"
-    }
-  }
-}
+```scute
+store "s3"
+  endpoint: "https://minio.local:9000"
+  bucket:   "gecko-state"
+  prefix:   "my-homelab/"
+end
 ```
 
 See [State Backends](State-Backends) for all options.
