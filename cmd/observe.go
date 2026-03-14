@@ -98,6 +98,15 @@ func runMolt(args []string, flags map[string]string) error {
 				spin.Start()
 			}
 			loaded.Stack.RegisterProvider(p)
+		case "proxmox":
+			p := k8sprovider.NewProxmoxProvider(hint.Config)
+			if err := p.Configure(ctx, hint.Config); err != nil {
+				spin.Stop(false)
+				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
+				spin = ui.NewSpinner("Configuring providers")
+				spin.Start()
+			}
+			loaded.Stack.RegisterProvider(p)
 		default:
 			spin.Stop(true)
 			ui.Warn(fmt.Sprintf("Unknown provider %q — skipping", hint.Name))

@@ -1,6 +1,6 @@
 module github.com/gecko-iac/gecko
 
-go 1.22.2
+go 1.25
 
 require (
 	github.com/hashicorp/nomad/api v0.0.0-20260309174859-bc94368de432
@@ -10,8 +10,11 @@ require (
 )
 
 require (
+	github.com/buger/goterm v1.0.4 // indirect
 	github.com/cenkalti/backoff/v3 v3.0.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
+	github.com/diskfs/go-diskfs v1.7.0 // indirect
+	github.com/djherbis/times v1.6.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
 	github.com/go-jose/go-jose/v4 v4.0.1 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
@@ -31,7 +34,10 @@ require (
 	github.com/hashicorp/go-sockaddr v1.0.2 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/imdario/mergo v0.3.6 // indirect
+	github.com/jinzhu/copier v0.3.4 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
+	github.com/luthermonson/go-proxmox v0.4.0 // indirect
+	github.com/magefile/mage v1.14.0 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
