@@ -1,0 +1,92 @@
+territory "proxmox-homelab"
+  workspace: "dev"
+end
+
+store "local"
+end
+
+habitat "proxmox"
+  endpoint:      env("PROXMOX_ENDPOINT") | "https://192.168.1.100:8006"
+  token_id:      env("PROXMOX_TOKEN_ID") | "root@pam!gecko"
+  token_secret:  env("PROXMOX_TOKEN_SECRET")
+  node:          env("PROXMOX_NODE") | "pve"
+  insecure:      true
+end
+
+// ─── Marks ────────────────────────────────────────────────────────────────────
+
+mark vm_memory   number: 2048
+mark lxc_memory  number: 512
+mark bridge      string: "vmbr1"
+
+// ─── Storage ──────────────────────────────────────────────────────────────────
+
+spawn "proxmox:storage" as "gecko-nfs"
+  storage: "gecko-nfs"
+  type:    "nfs"
+  server:  "192.168.1.10"
+  export:  "/mnt/storage"
+  content: "images,rootdir,iso"
+  nodes:   env("PROXMOX_NODE") | "pve"
+end
+
+// ─── Network ─────────────────────────────────────────────────────────────────
+
+spawn "proxmox:network" as "vm-bridge"
+  iface:        bridge
+  type:         "bridge"
+  bridge_ports: "eth1"
+  autostart:    true
+  comments:     "VM bridge managed by gecko"
+end
+
+// ─── VM ───────────────────────────────────────────────────────────────────────
+
+spawn "proxmox:vm" as "web-01"
+  needs:     @vm-bridge
+  name:      "web-01"
+  memory:    vm_memory
+  cores:     2
+  disk_size: "20G"
+  storage:   "local-lvm"
+  iso:       "local:iso/debian-12-amd64-netinst.iso"
+  net0:      "virtio,bridge=#{bridge}"
+  start:     false
+end
+
+spawn "proxmox:vm" as "db-01"
+  needs:     @vm-bridge
+  name:      "db-01"
+  memory:    4096
+  cores:     2
+  disk_size: "50G"
+  storage:   "local-lvm"
+  iso:       "local:iso/debian-12-amd64-netinst.iso"
+  net0:      "virtio,bridge=#{bridge}"
+  start:     false
+end
+
+// ─── LXC ──────────────────────────────────────────────────────────────────────
+
+spawn "proxmox:lxc" as "cache-01"
+  needs:      @vm-bridge
+  hostname:   "cache-01"
+  ostemplate: "local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst"
+  memory:     lxc_memory
+  cores:      1
+  rootfs:     "local-lvm:8"
+  net0:       "name=eth0,bridge=#{bridge},ip=dhcp"
+  start:      true
+end
+
+// ─── Signals ─────────────────────────────────────────────────────────────────
+
+signal "web_vm_name"
+  value:       "web-01"
+  description: "Proxmox VM name for the web server"
+end
+
+signal "storage_name"
+  value:       "gecko-nfs"
+  description: "Cluster storage pool name"
+end
