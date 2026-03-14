@@ -104,7 +104,7 @@ func networkCfgFromInputs(inputs core.Inputs, name string) NetworkConfig {
 	return NetworkConfig{
 		Iface:       getStringInputFallback(inputs, "iface", name),
 		Type:        getStringInputFallback(inputs, "type", "bridge"),
-		CIDR:        inputs["cidr"].(string),
+		CIDR:        func() string { v, _ := inputs["cidr"].(string); return v }(),
 		Gateway:     func() string { v, _ := inputs["gateway"].(string); return v }(),
 		BridgePorts: func() string { v, _ := inputs["bridge_ports"].(string); return v }(),
 		Comments:    func() string { v, _ := inputs["comments"].(string); return v }(),
