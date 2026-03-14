@@ -1,10 +1,11 @@
 module github.com/gecko-iac/gecko
 
-go 1.25
+go 1.24.0
 
 require (
 	github.com/hashicorp/nomad/api v0.0.0-20260309174859-bc94368de432
 	github.com/hashicorp/vault/api v1.14.0
+	github.com/luthermonson/go-proxmox v0.3.2
 	k8s.io/apimachinery v0.31.0
 	k8s.io/client-go v0.31.0
 )
@@ -36,7 +37,6 @@ require (
 	github.com/imdario/mergo v0.3.6 // indirect
 	github.com/jinzhu/copier v0.3.4 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/luthermonson/go-proxmox v0.4.0 // indirect
 	github.com/magefile/mage v1.14.0 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
