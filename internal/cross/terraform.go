@@ -150,72 +150,6 @@ func normalizeTFInputs(tfType string, res *ImportedResource) {
 	attrs := res.Inputs
 
 	switch {
-	case isKubernetesTFType(tfType):
-		clean := make(map[string]interface{})
-		if meta, ok := attrs["metadata"].(map[string]interface{}); ok {
-			if n, ok := meta["name"].(string); ok && n != "" {
-				clean["name"] = n
-				res.Name = sanitizeName(n)
-			}
-			if ns, ok := meta["namespace"].(string); ok && ns != "" {
-				clean["namespace"] = ns
-			}
-			if labels, ok := meta["labels"]; ok && labels != nil {
-				clean["labels"] = labels
-			}
-			if annotations, ok := meta["annotations"]; ok && annotations != nil {
-				clean["annotations"] = annotations
-			}
-		}
-		if spec, ok := attrs["spec"].(map[string]interface{}); ok {
-			if replicas, ok := spec["replicas"]; ok {
-				clean["replicas"] = replicas
-			}
-			extractTFContainerImage(spec, clean)
-		}
-		res.Inputs = clean
-
-	case tfType == "nomad_job":
-		clean := make(map[string]interface{})
-		for _, k := range []string{"name", "jobspec", "detach", "purge_on_destroy"} {
-			if v, ok := attrs[k]; ok {
-				clean[k] = v
-			}
-		}
-		if name, ok := attrs["name"].(string); ok {
-			res.Name = sanitizeName(name)
-		}
-		res.Inputs = clean
-
-	case tfType == "vault_generic_secret" || tfType == "vault_kv_secret" || tfType == "vault_kv_secret_v2":
-		clean := make(map[string]interface{})
-		for _, k := range []string{"path", "mount", "name", "namespace"} {
-			if v, ok := attrs[k]; ok {
-				clean[k] = v
-			}
-		}
-		res.Inputs = clean
-
-	case tfType == "vault_policy":
-		clean := make(map[string]interface{})
-		if name, ok := attrs["name"].(string); ok {
-			clean["name"] = name
-			res.Name = sanitizeName(name)
-		}
-		if policy, ok := attrs["policy"].(string); ok {
-			clean["policy"] = policy
-		}
-		res.Inputs = clean
-
-	case tfType == "vault_auth_backend" || tfType == "vault_mount":
-		clean := make(map[string]interface{})
-		for _, k := range []string{"type", "path", "description"} {
-			if v, ok := attrs[k]; ok {
-				clean[k] = v
-			}
-		}
-		res.Inputs = clean
-
 	case tfType == "gitea_repository":
 		clean := make(map[string]interface{})
 		for _, k := range []string{"name", "owner", "description", "private", "auto_init", "default_branch"} {
@@ -251,36 +185,6 @@ func normalizeTFInputs(tfType string, res *ImportedResource) {
 			res.Name = sanitizeName(name)
 		}
 		res.Inputs = clean
-	}
-}
-
-func isKubernetesTFType(t string) bool {
-	return strings.HasPrefix(t, "kubernetes_")
-}
-
-// extractTFContainerImage walks the flattened k8s spec to find the first container image.
-func extractTFContainerImage(spec map[string]interface{}, out map[string]interface{}) {
-	tmpl, ok := spec["template"].(map[string]interface{})
-	if !ok {
-		return
-	}
-	podSpec, ok := tmpl["spec"].(map[string]interface{})
-	if !ok {
-		return
-	}
-	var containers []interface{}
-	switch c := podSpec["container"].(type) {
-	case []interface{}:
-		containers = c
-	case map[string]interface{}:
-		containers = []interface{}{c}
-	}
-	if len(containers) > 0 {
-		if c, ok := containers[0].(map[string]interface{}); ok {
-			if img, ok := c["image"].(string); ok && img != "" {
-				out["image"] = img
-			}
-		}
 	}
 }
 

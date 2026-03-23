@@ -1,0 +1,25 @@
+territory "hostinger-infra"
+  workspace: "dev"
+end
+
+store "local"
+end
+
+habitat "hostinger"
+  api_token: env("HOSTINGER_API_TOKEN")
+end
+
+spawn "hostinger:vps" as "app-server"
+  hostname: "app-server-01"
+  plan:     "kvm-2"
+  region:   "us-east"
+end
+
+spawn "hostinger:domain" as "mysite"
+  name: "mysite.com"
+end
+
+signal "server_ip"
+  value:       @app-server.ipv4
+  description: "VPS public IP address"
+end

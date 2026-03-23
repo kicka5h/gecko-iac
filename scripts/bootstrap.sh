@@ -6,15 +6,8 @@ echo "────────────────────────�
 
 cd "$(dirname "$0")/.."
 
-echo "→ Fetching Kubernetes client-go..."
-go get k8s.io/client-go@v0.31.0
-go get k8s.io/apimachinery@v0.31.0
-
-echo "→ Fetching Vault API..."
-go get github.com/hashicorp/vault/api@v1.14.0
-
-echo "→ Fetching Nomad API..."
-go get github.com/hashicorp/nomad/api@latest || go get github.com/hashicorp/nomad@latest
+echo "→ Fetching Proxmox client..."
+go get github.com/luthermonson/go-proxmox@v0.3.2
 
 echo "→ Tidying module graph..."
 go mod tidy

@@ -22,11 +22,11 @@ FOSS infrastructure stack. No external config files required.`,
 	Args: []string{"project-name"},
 	Flags: []Flag{
 		{Name: "runtime", Short: "r", Default: "scute", Usage: "Stack runtime: go, python, typescript, hcl"},
-		{Name: "providers", Short: "p", Default: "k8s", Usage: "Comma-separated providers: k8s, proxmox, nomad, gitea, minio, vault"},
+		{Name: "providers", Short: "p", Default: "proxmox", Usage: "Comma-separated providers: proxmox, fly, gitea, minio"},
 		{Name: "workspace", Short: "w", Default: "dev", Usage: "Initial workspace name"},
 		{Name: "backend", Short: "b", Default: "local", Usage: "State backend: local, s3, gcs, etcd, postgres"},
 		{Name: "force", Short: "f", Default: "false", Usage: "Overwrite existing project"},
-		{Name: "template", Short: "t", Default: "", Usage: "Bootstrap from a template: k8s-homelab, proxmox-cluster, gitops"},
+		{Name: "template", Short: "t", Default: "", Usage: "Bootstrap from a template: proxmox-cluster, fly-deploy, gitops"},
 	},
 	Run: runHatch,
 }
@@ -45,7 +45,7 @@ func runHatch(args []string, flags map[string]string) error {
 
 	projectName = strings.ToLower(strings.ReplaceAll(projectName, " ", "-"))
 	runtime := flagVal(flags, "runtime", "scute")
-	providers := strings.Split(flagVal(flags, "providers", "k8s"), ",")
+	providers := strings.Split(flagVal(flags, "providers", "proxmox"), ",")
 	workspace := flagVal(flags, "workspace", "dev")
 	backend := flagVal(flags, "backend", "local")
 	template := flagVal(flags, "template", "")
@@ -169,9 +169,9 @@ stack = gecko.Stack(name=%q, workspace=%q)
 # Configure providers
 %s
 # Define your resources here
-# Example: k8s namespace
-# ns = gecko.Resource(stack, "k8s:namespace", name="app-namespace",
-#     inputs={"name": "my-app", "labels": {"env": workspace}})
+# Example: proxmox VM
+# vm = gecko.Resource(stack, "proxmox:vm", name="web-01",
+#     inputs={"node": "pve", "cores": 2, "memory": 4096})
 
 gecko.export(stack)
 `, name, workspace, pythonProviders(providers))
@@ -185,9 +185,9 @@ const stack = new gecko.Stack({ name: %q, workspace: %q });
 %s
 // Define your resources here
 // Example:
-// const ns = new gecko.Resource(stack, "k8s:namespace", {
-//   name: "app-namespace",
-//   inputs: { name: "my-app" }
+// const vm = new gecko.Resource(stack, "proxmox:vm", {
+//   name: "web-01",
+//   inputs: { node: "pve", cores: 2, memory: 4096 }
 // });
 
 export default stack;
@@ -215,31 +215,33 @@ func main() {
 	// Declare your infrastructure below. Gecko computes a dependency graph
 	// automatically and applies changes in the correct order.
 	//
-	// Example: Kubernetes namespace
-	// nsID := stack.Resource(core.ResourceArgs{
-	// 	Type: "k8s:namespace",
-	// 	Name: "app-namespace",
+	// Example: Proxmox VM
+	// vmID := stack.Resource(core.ResourceArgs{
+	// 	Type: "proxmox:vm",
+	// 	Name: "web-01",
 	// 	Inputs: core.Inputs{
-	// 		"name": "my-app",
-	// 		"labels": map[string]string{"env": %q},
+	// 		"node":   "pve",
+	// 		"cores":  2,
+	// 		"memory": 4096,
+	// 		"clone":  "ubuntu-template",
 	// 	},
 	// })
 	//
-	// Example: Deployment depending on namespace
+	// Example: Network depending on VM
 	// _ = stack.Resource(core.ResourceArgs{
-	// 	Type:      "k8s:deployment",
-	// 	Name:      "api-server",
-	// 	DependsOn: []core.ResourceID{nsID},
+	// 	Type:      "proxmox:network",
+	// 	Name:      "vmbr1",
+	// 	DependsOn: []core.ResourceID{vmID},
 	// 	Inputs: core.Inputs{
-	// 		"namespace": "my-app",
-	// 		"image":     "nginx:latest",
-	// 		"replicas":  3,
+	// 		"node":   "pve",
+	// 		"iface":  "vmbr1",
+	// 		"cidr":   "10.10.10.1/24",
 	// 	},
 	// })
 	_ = ctx
 	_ = stack
 }
-`, goImports(providers), name, workspace, goProviders(providers), workspace)
+`, goImports(providers), name, workspace, goProviders(providers))
 	}
 }
 
@@ -247,12 +249,10 @@ func goImports(providers []string) string {
 	var imports []string
 	for _, p := range providers {
 		switch strings.TrimSpace(p) {
-		case "k8s", "kubernetes":
-			imports = append(imports, `"github.com/gecko-iac/gecko/providers/k8s"`)
 		case "proxmox":
 			imports = append(imports, `"github.com/gecko-iac/gecko/providers/proxmox"`)
-		case "nomad":
-			imports = append(imports, `"github.com/gecko-iac/gecko/providers/nomad"`)
+		case "fly":
+			imports = append(imports, `"github.com/gecko-iac/gecko/providers/fly"`)
 		}
 	}
 	if len(imports) == 0 {
@@ -315,17 +315,17 @@ node_modules/
 
 func applyTemplate(template, name string, providers []string) {
 	switch template {
-	case "k8s-homelab":
-		ui.Header("Applying k8s-homelab template")
-		ui.Indent("✓ cert-manager resources")
-		ui.Indent("✓ ingress-nginx namespace")
-		ui.Indent("✓ metallb configuration")
-		ui.Indent("✓ longhorn storage class")
 	case "proxmox-cluster":
 		ui.Header("Applying proxmox-cluster template")
 		ui.Indent("✓ VM pool configuration")
 		ui.Indent("✓ network bridge setup")
 		ui.Indent("✓ storage pool definitions")
+		ui.Indent("✓ cloud-init templates")
+	case "fly-deploy":
+		ui.Header("Applying fly-deploy template")
+		ui.Indent("✓ Fly.io app configuration")
+		ui.Indent("✓ machine definitions")
+		ui.Indent("✓ volume attachments")
 	case "gitops":
 		ui.Header("Applying gitops template")
 		ui.Indent("✓ Gitea repository")
@@ -345,65 +345,6 @@ func generateScuteStack(name string, providers []string, workspace, backend stri
 	for _, p := range providers {
 		p = strings.TrimSpace(p)
 		switch p {
-		case "k8s", "kubernetes":
-			habitats.WriteString(`habitat "k8s"
-  kubeconfig: env("KUBECONFIG") | "~/.kube/config"
-  context:    env("KUBE_CONTEXT") | "homelab"
-end
-
-`)
-			spawns.WriteString(`# ─── Namespaces ──────────────────────────────────────────────────────────
-spawn "k8s:namespace" as "app-ns"
-  name:   app_name
-  labels: common_tags
-end
-
-# ─── Deployment ───────────────────────────────────────────────────────────
-spawn "k8s:deployment" as "api"
-  needs:     @app-ns
-  namespace: @app-ns.name
-  image:     "` + "`" + `#{app_name}:#{image_tag}` + "`" + `"
-  replicas:  replicas
-
-  env:
-    APP_ENV:   workspace
-    LOG_LEVEL: log_level
-  end
-
-  resources:
-    requests:
-      cpu:    "100m"
-      memory: "128Mi"
-    end
-    limits:
-      cpu:    "500m"
-      memory: "512Mi"
-    end
-  end
-
-  when is_production
-    replicas: replicas * 3
-  end
-end
-
-# ─── Service ──────────────────────────────────────────────────────────────
-spawn "k8s:service" as "api-svc"
-  needs:       @api
-  namespace:   @app-ns.name
-  port:        80
-  target_port: 8080
-end
-
-# ─── Team namespaces (one per team via across) ────────────────────────────
-spawn "k8s:namespace" as "team-ns" across ["backend", "frontend", "data"]
-  name:   item
-  labels:
-    team:       item
-    managed-by: "gecko"
-  end
-end
-
-`)
 		case "proxmox":
 			habitats.WriteString(`habitat "proxmox"
   endpoint: env("PROXMOX_ENDPOINT") | "https://proxmox.local:8006"
@@ -411,14 +352,61 @@ end
 end
 
 `)
-			spawns.WriteString(`# ─── VMs (one per worker index via across) ───────────────────────────────
-spawn "proxmox:vm" as "worker" across 1..worker_count
+			spawns.WriteString(`# ─── VMs ─────────────────────────────────────────────────────────────────
+spawn "proxmox:vm" as "web-01"
   node:   "pve"
-  name:   "worker-#{item}"
+  name:   "` + "`" + `#{app_name}-web-01` + "`" + `"
   cores:  2
   memory: 4096
   clone:  "ubuntu-template"
-  tags:   [workspace, "kubernetes", "worker"]
+  tags:   [workspace, "web"]
+
+  when is_production
+    cores:  4
+    memory: 8192
+  end
+end
+
+# ─── Network ─────────────────────────────────────────────────────────────
+spawn "proxmox:network" as "app-net"
+  needs: @web-01
+  node:  "pve"
+  iface: "vmbr1"
+  cidr:  "10.10.10.1/24"
+end
+
+# ─── LXC Containers (one per service via across) ─────────────────────────
+spawn "proxmox:lxc" as "svc" across ["redis", "postgres", "monitoring"]
+  node:     "pve"
+  name:     "#{item}-#{workspace}"
+  ostempl:  "local:vztmpl/debian-12-standard_12.2-1_amd64.tar.zst"
+  cores:    1
+  memory:   1024
+  tags:     [workspace, item, "managed-by:gecko"]
+end
+
+`)
+		case "fly":
+			habitats.WriteString(`habitat "fly"
+  token: secret("fly.api.token")
+  org:   env("FLY_ORG") | "personal"
+end
+
+`)
+			spawns.WriteString(`# ─── Fly App ─────────────────────────────────────────────────────────────
+spawn "fly:app" as "web-app"
+  name: "#{app_name}-#{workspace}"
+  org:  "personal"
+end
+
+# ─── Fly Machine ─────────────────────────────────────────────────────────
+spawn "fly:machine" as "web"
+  needs:  @web-app
+  app:    @web-app.name
+  image:  "#{app_name}:latest"
+  region: "iad"
+  cpus:   1
+  memory: 256
 end
 
 `)

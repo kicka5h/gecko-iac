@@ -11,8 +11,8 @@
 //	  workspace: env("GECKO_WORKSPACE") | "dev"
 //	end
 //
-//	habitat "k8s"
-//	  kubeconfig: "~/.kube/config"
+//	habitat "proxmox"
+//	  endpoint: "https://pve.example.com:8006"
 //	end
 //
 //	mark replicas number: 3
@@ -21,7 +21,7 @@
 //	  prefix: "#{app}-#{workspace}"
 //	end
 //
-//	spawn "k8s:deployment" as "api"
+//	spawn "proxmox:vm" as "api"
 //	  needs:    @monitoring
 //	  replicas: replicas
 //	  when debug

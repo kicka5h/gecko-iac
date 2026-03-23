@@ -1,17 +1,17 @@
 # Quick Start
 
-This guide gets you from zero to a running Kubernetes deployment in about 5 minutes using [kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker).
+This guide gets you from zero to a running Fly.io app in about 5 minutes. Fly.io is the simplest provider to start with — all you need is an API token.
 
 ## Prerequisites
 
-- Docker Desktop (or Docker Engine on Linux)
-- `kind` installed: `brew install kind`
+- A [Fly.io](https://fly.io) account
+- A Fly.io API token: `fly tokens create org`
 - Gecko installed: see [Installation](Installation)
 
 ## 1. Create a project
 
 ```bash
-gecko hatch my-homelab --providers k8s,kind --workspace dev
+gecko hatch my-homelab --providers fly --workspace dev
 cd my-homelab
 ```
 
@@ -35,35 +35,22 @@ territory "my-homelab"
   workspace: "dev"
 end
 
-habitat "kind"
+habitat "fly"
+  api_token: env("FLY_API_TOKEN")
+  region:    "ord"
 end
 
-habitat "k8s"
-  kubeconfig: "~/.kube/config"
-  context:    "kind-my-homelab"
+spawn "fly:app" as "web-app"
+  name: "my-homelab-web"
 end
 
-spawn "kind:cluster" as "cluster"
-  name: "my-homelab"
-end
-
-spawn "k8s:namespace" as "app-ns"
-  needs: @cluster
-  name:  "my-app"
-end
-
-spawn "k8s:deployment" as "nginx"
-  needs:     @app-ns
-  namespace: @app-ns.name
-  image:     "nginx:latest"
-  replicas:  1
-  ports:     [80]
-end
-
-spawn "k8s:service" as "nginx-svc"
-  needs:     @nginx
-  namespace: @app-ns.name
-  port:      80
+spawn "fly:machine" as "web"
+  needs: @web-app
+  app:   @web-app.name
+  image: "nginx:latest"
+  cpus:  1
+  memory: 256
+  ports: [80, 443]
 end
 ```
 
@@ -81,7 +68,7 @@ Gecko shows every resource it will create, with no changes made yet.
 gecko grip
 ```
 
-Gecko creates the kind cluster, then the namespace, deployment, and service — in dependency order.
+Gecko creates the Fly app, then the machine — in dependency order.
 
 ## 5. Check status
 
@@ -92,7 +79,7 @@ gecko bask
 ## 6. Stream logs
 
 ```bash
-gecko tail --resource k8s:deployment.nginx --follow
+gecko tail --resource fly:machine.web --follow
 ```
 
 ## 7. Clean up

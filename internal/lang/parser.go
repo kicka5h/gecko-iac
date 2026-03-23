@@ -179,7 +179,7 @@ func (p *Parser) parseSpawn(protected bool) *SpawnBlock {
 	tok := p.advance() // spawn or spawn!
 	b := &SpawnBlock{Pos: p.posOf(tok), Protected: protected}
 
-	// Type string: "k8s:namespace" or unquoted k8s:namespace
+	// Type string: "proxmox:vm" or unquoted proxmox:vm
 	if p.check(STRING) {
 		b.TypeStr = p.advance().Literal
 	} else {
@@ -418,7 +418,7 @@ func (p *Parser) parseWhen() *WhenBlock {
 
 // ─── Type String ──────────────────────────────────────────────────────────────
 
-// parseUnquotedType reads: k8s:namespace (ident : ident)
+// parseUnquotedType reads: proxmox:vm (ident : ident)
 func (p *Parser) parseUnquotedType() string {
 	var sb strings.Builder
 	if p.check(IDENT) {

@@ -1,0 +1,33 @@
+territory "ubicloud-infra"
+  workspace: "dev"
+end
+
+store "local"
+end
+
+habitat "ubicloud"
+  api_token:  env("UBICLOUD_API_TOKEN")
+  project_id: env("UBICLOUD_PROJECT_ID")
+end
+
+spawn "ubicloud:firewall" as "web-fw"
+  name:        "web-firewall"
+  description: "Allow HTTP/HTTPS traffic"
+end
+
+spawn "ubicloud:subnet" as "app-net"
+  name:     "app-subnet"
+  location: "us-east"
+end
+
+spawn "ubicloud:vm" as "web-01"
+  needs:    @web-fw, @app-net
+  name:     "web-01"
+  size:     "standard-2"
+  location: "us-east"
+end
+
+signal "vm_ip"
+  value:       @web-01.ip
+  description: "VM public IP address"
+end

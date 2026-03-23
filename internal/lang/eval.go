@@ -891,7 +891,7 @@ func (e *Evaluator) evalFn(n *FunctionCall) Value {
 	case "base64":
 		return StringVal{V: simpleB64(argStr(0))}
 	case "yaml_label":
-		// Formats a map as k: v YAML labels for k8s
+		// Formats a map as k: v YAML labels for proxmox
 		if mv, ok := arg(0).(MapVal); ok {
 			var lines []string
 			for k, v := range mv.V {

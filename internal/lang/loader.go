@@ -52,7 +52,7 @@ func LoadProject(opts LoadOptions) (*LoadedStack, error) {
 	if len(files) == 0 {
 		return nil, fmt.Errorf(
 			"no .scute files found in %s (workspace: %s)\n"+
-				"  Try: gecko hatch <name> --providers k8s",
+				"  Try: gecko hatch <name> --providers proxmox",
 			dir, workspace,
 		)
 	}

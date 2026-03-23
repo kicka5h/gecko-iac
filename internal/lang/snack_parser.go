@@ -34,7 +34,7 @@ func (p *Parser) parseSnackFile() *SnackFile {
 //	  param namespace  string: "monitoring"
 //	  param replicas   number: 2
 //	  camouflage ... end
-//	  spawn "k8s:deployment" as "api" ... end
+//	  spawn "proxmox:vm" as "api" ... end
 //	  emit "endpoint"
 //	    value: "..."
 //	  end
