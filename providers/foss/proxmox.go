@@ -1,11 +1,13 @@
-package k8s
+package foss
 
 import (
 	"context"
 	"crypto/tls"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	proxmox "github.com/luthermonson/go-proxmox"
 
@@ -306,4 +308,507 @@ func (p *ProxmoxProvider) Diff(ctx context.Context, current *core.ResourceState,
 		kind = core.ChangeUpdate
 	}
 	return &core.Diff{ResourceID: id, Kind: kind, Changes: changes}, nil
+}
+
+// ── VM resource handlers ────────────────────────────────────────────────────
+
+func (p *ProxmoxProvider) createVM(ctx context.Context, args core.ResourceArgs) (*core.ResourceState, error) {
+	vmid, hasID := toInt(args.Inputs["vmid"])
+	if !hasID || vmid == 0 {
+		var err error
+		vmid, err = p.api.NextVMID(ctx)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	opts := vmOptionsFromInputs(args.Inputs, args.Name)
+	if err := p.api.CreateVM(ctx, vmid, opts); err != nil {
+		return nil, fmt.Errorf("proxmox: create vm %q: %w", args.Name, err)
+	}
+
+	if start, _ := args.Inputs["start"].(bool); start {
+		if err := p.api.StartVM(ctx, vmid); err != nil {
+			return nil, err
+		}
+	}
+
+	return &core.ResourceState{
+		ID:         proxmoxResourceID(args),
+		Type:       args.Type,
+		Name:       args.Name,
+		Status:     core.StatusRunning,
+		Inputs:     args.Inputs,
+		Outputs:    core.Outputs{"vmid": vmid},
+		ExternalID: strconv.Itoa(vmid),
+		ProviderID: "proxmox",
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	}, nil
+}
+
+func (p *ProxmoxProvider) readVM(ctx context.Context, id core.ResourceID, externalID string) (*core.ResourceState, error) {
+	vmid, err := strconv.Atoi(externalID)
+	if err != nil {
+		return nil, fmt.Errorf("proxmox: invalid vm externalID %q: %w", externalID, err)
+	}
+
+	info, err := p.api.ReadVM(ctx, vmid)
+	if err != nil {
+		return nil, err
+	}
+	if info == nil {
+		return nil, nil
+	}
+
+	status := core.StatusRunning
+	if info.Status == "stopped" {
+		status = core.StatusPending
+	}
+
+	return &core.ResourceState{
+		ID:         id,
+		Type:       "proxmox:vm",
+		ExternalID: externalID,
+		ProviderID: "proxmox",
+		Status:     status,
+		Inputs: core.Inputs{
+			"vmid":   info.VMID,
+			"name":   info.Name,
+			"memory": info.Memory,
+			"cores":  info.Cores,
+			"net0":   info.Net0,
+		},
+		Outputs:   core.Outputs{"vmid": vmid},
+		UpdatedAt: time.Now(),
+	}, nil
+}
+
+func (p *ProxmoxProvider) updateVM(ctx context.Context, current *core.ResourceState, desired core.ResourceArgs) (*core.ResourceState, error) {
+	vmid, err := strconv.Atoi(current.ExternalID)
+	if err != nil {
+		return nil, fmt.Errorf("proxmox: invalid vm externalID %q: %w", current.ExternalID, err)
+	}
+
+	opts := vmOptionsFromInputs(desired.Inputs, desired.Name)
+	if err := p.api.UpdateVM(ctx, vmid, opts); err != nil {
+		return nil, err
+	}
+
+	return p.readVM(ctx, proxmoxResourceID(desired), current.ExternalID)
+}
+
+func (p *ProxmoxProvider) deleteVM(ctx context.Context, state *core.ResourceState) error {
+	vmid, err := strconv.Atoi(state.ExternalID)
+	if err != nil {
+		return fmt.Errorf("proxmox: invalid vm externalID %q: %w", state.ExternalID, err)
+	}
+
+	// Check if running so we can stop first.
+	info, err := p.api.ReadVM(ctx, vmid)
+	if err != nil {
+		return err
+	}
+	if info == nil {
+		return nil // already gone
+	}
+
+	if info.Status == "running" {
+		if err := p.api.StopVM(ctx, vmid); err != nil {
+			return err
+		}
+	}
+
+	return p.api.DeleteVM(ctx, vmid)
+}
+
+// vmOptionsFromInputs maps Scute inputs to VirtualMachineOptions.
+func vmOptionsFromInputs(inputs core.Inputs, name string) []proxmox.VirtualMachineOption {
+	var opts []proxmox.VirtualMachineOption
+
+	vmName := getStringInputFallback(inputs, "name", name)
+	opts = append(opts, proxmox.VirtualMachineOption{Name: "name", Value: vmName})
+
+	if v, ok := toInt(inputs["memory"]); ok {
+		opts = append(opts, proxmox.VirtualMachineOption{Name: "memory", Value: strconv.Itoa(v)})
+	}
+	if v, ok := toInt(inputs["cores"]); ok {
+		opts = append(opts, proxmox.VirtualMachineOption{Name: "cores", Value: strconv.Itoa(v)})
+	}
+	if v, ok := toInt(inputs["sockets"]); ok {
+		opts = append(opts, proxmox.VirtualMachineOption{Name: "sockets", Value: strconv.Itoa(v)})
+	}
+	if v, ok := inputs["iso"].(string); ok && v != "" {
+		opts = append(opts, proxmox.VirtualMachineOption{Name: "cdrom", Value: v})
+	}
+	if v, ok := inputs["net0"].(string); ok && v != "" {
+		opts = append(opts, proxmox.VirtualMachineOption{Name: "net0", Value: v})
+	}
+	if v, ok := inputs["disk_size"].(string); ok && v != "" {
+		storage := getStringInputFallback(inputs, "storage", "local-lvm")
+		opts = append(opts, proxmox.VirtualMachineOption{Name: "scsi0", Value: storage + ":" + v})
+		opts = append(opts, proxmox.VirtualMachineOption{Name: "scsihw", Value: "virtio-scsi-pci"})
+	}
+
+	return opts
+}
+
+// ── LXC resource handlers ───────────────────────────────────────────────────
+
+func (p *ProxmoxProvider) createLXC(ctx context.Context, args core.ResourceArgs) (*core.ResourceState, error) {
+	vmid, hasID := toInt(args.Inputs["vmid"])
+	if !hasID || vmid == 0 {
+		var err error
+		vmid, err = p.api.NextVMID(ctx)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	opts := lxcOptionsFromInputs(args.Inputs, args.Name)
+	if err := p.api.CreateLXC(ctx, vmid, opts); err != nil {
+		return nil, fmt.Errorf("proxmox: create lxc %q: %w", args.Name, err)
+	}
+
+	if start, _ := args.Inputs["start"].(bool); start {
+		if err := p.api.StartLXC(ctx, vmid); err != nil {
+			return nil, err
+		}
+	}
+
+	// ExternalID uses "lxc/<vmid>" to avoid collisions with VMs sharing the same numeric ID.
+	externalID := "lxc/" + strconv.Itoa(vmid)
+	return &core.ResourceState{
+		ID:         proxmoxResourceID(args),
+		Type:       args.Type,
+		Name:       args.Name,
+		Status:     core.StatusRunning,
+		Inputs:     args.Inputs,
+		Outputs:    core.Outputs{"vmid": vmid},
+		ExternalID: externalID,
+		ProviderID: "proxmox",
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	}, nil
+}
+
+func (p *ProxmoxProvider) readLXC(ctx context.Context, id core.ResourceID, externalID string) (*core.ResourceState, error) {
+	vmid, err := lxcVMID(externalID)
+	if err != nil {
+		return nil, err
+	}
+
+	info, err := p.api.ReadLXC(ctx, vmid)
+	if err != nil {
+		return nil, err
+	}
+	if info == nil {
+		return nil, nil
+	}
+
+	status := core.StatusRunning
+	if info.Status == "stopped" {
+		status = core.StatusPending
+	}
+
+	return &core.ResourceState{
+		ID:         id,
+		Type:       "proxmox:lxc",
+		ExternalID: externalID,
+		ProviderID: "proxmox",
+		Status:     status,
+		Inputs: core.Inputs{
+			"vmid":     info.VMID,
+			"hostname": info.Hostname,
+			"memory":   info.Memory,
+			"cores":    info.Cores,
+		},
+		Outputs:   core.Outputs{"vmid": vmid},
+		UpdatedAt: time.Now(),
+	}, nil
+}
+
+func (p *ProxmoxProvider) updateLXC(ctx context.Context, current *core.ResourceState, desired core.ResourceArgs) (*core.ResourceState, error) {
+	vmid, err := lxcVMID(current.ExternalID)
+	if err != nil {
+		return nil, err
+	}
+
+	opts := lxcOptionsFromInputs(desired.Inputs, desired.Name)
+	if err := p.api.UpdateLXC(ctx, vmid, opts); err != nil {
+		return nil, err
+	}
+
+	return p.readLXC(ctx, proxmoxResourceID(desired), current.ExternalID)
+}
+
+func (p *ProxmoxProvider) deleteLXC(ctx context.Context, state *core.ResourceState) error {
+	vmid, err := lxcVMID(state.ExternalID)
+	if err != nil {
+		return err
+	}
+
+	info, err := p.api.ReadLXC(ctx, vmid)
+	if err != nil {
+		return err
+	}
+	if info == nil {
+		return nil // already gone
+	}
+
+	if info.Status == "running" {
+		if err := p.api.StopLXC(ctx, vmid); err != nil {
+			return err
+		}
+	}
+
+	return p.api.DeleteLXC(ctx, vmid)
+}
+
+// lxcOptionsFromInputs maps Scute inputs to ContainerOptions.
+func lxcOptionsFromInputs(inputs core.Inputs, name string) []proxmox.ContainerOption {
+	var opts []proxmox.ContainerOption
+
+	hostname := getStringInputFallback(inputs, "hostname", name)
+	opts = append(opts, proxmox.ContainerOption{Name: "hostname", Value: hostname})
+
+	if v, ok := inputs["ostemplate"].(string); ok && v != "" {
+		opts = append(opts, proxmox.ContainerOption{Name: "ostemplate", Value: v})
+	}
+	if v, ok := toInt(inputs["memory"]); ok {
+		opts = append(opts, proxmox.ContainerOption{Name: "memory", Value: strconv.Itoa(v)})
+	}
+	if v, ok := toInt(inputs["cores"]); ok {
+		opts = append(opts, proxmox.ContainerOption{Name: "cores", Value: strconv.Itoa(v)})
+	}
+	if v, ok := inputs["rootfs"].(string); ok && v != "" {
+		opts = append(opts, proxmox.ContainerOption{Name: "rootfs", Value: v})
+	}
+	if v, ok := inputs["net0"].(string); ok && v != "" {
+		opts = append(opts, proxmox.ContainerOption{Name: "net0", Value: v})
+	}
+	if v, ok := inputs["password"].(string); ok && v != "" {
+		opts = append(opts, proxmox.ContainerOption{Name: "password", Value: v})
+	}
+
+	return opts
+}
+
+// lxcVMID parses the VMID from an LXC externalID ("lxc/<vmid>").
+func lxcVMID(externalID string) (int, error) {
+	raw := externalID
+	if len(externalID) > 4 && externalID[:4] == "lxc/" {
+		raw = externalID[4:]
+	}
+	vmid, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("proxmox: invalid lxc externalID %q: %w", externalID, err)
+	}
+	return vmid, nil
+}
+
+// ── Storage resource handlers ───────────────────────────────────────────────
+
+func (p *ProxmoxProvider) createStorage(ctx context.Context, args core.ResourceArgs) (*core.ResourceState, error) {
+	name := getStringInputFallback(args.Inputs, "storage", args.Name)
+	opts := storageOptionsFromInputs(args.Inputs, name)
+
+	if err := p.api.CreateStorage(ctx, opts); err != nil {
+		return nil, fmt.Errorf("proxmox: create storage %q: %w", name, err)
+	}
+
+	return &core.ResourceState{
+		ID:         proxmoxResourceID(args),
+		Type:       args.Type,
+		Name:       args.Name,
+		Status:     core.StatusRunning,
+		Inputs:     args.Inputs,
+		Outputs:    core.Outputs{"storage": name},
+		ExternalID: name,
+		ProviderID: "proxmox",
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	}, nil
+}
+
+func (p *ProxmoxProvider) readStorage(ctx context.Context, id core.ResourceID, externalID string) (*core.ResourceState, error) {
+	info, err := p.api.ReadStorage(ctx, externalID)
+	if err != nil {
+		return nil, err
+	}
+	if info == nil {
+		return nil, nil
+	}
+
+	return &core.ResourceState{
+		ID:         id,
+		Type:       "proxmox:storage",
+		ExternalID: externalID,
+		ProviderID: "proxmox",
+		Status:     core.StatusRunning,
+		Inputs: core.Inputs{
+			"storage": info.Name,
+			"type":    info.Type,
+			"content": info.Content,
+		},
+		Outputs:   core.Outputs{"storage": info.Name},
+		UpdatedAt: time.Now(),
+	}, nil
+}
+
+func (p *ProxmoxProvider) updateStorage(ctx context.Context, current *core.ResourceState, desired core.ResourceArgs) (*core.ResourceState, error) {
+	name := current.ExternalID
+	opts := storageOptionsFromInputs(desired.Inputs, name)
+
+	if err := p.api.UpdateStorage(ctx, name, opts); err != nil {
+		return nil, err
+	}
+
+	return p.readStorage(ctx, proxmoxResourceID(desired), name)
+}
+
+func (p *ProxmoxProvider) deleteStorage(ctx context.Context, state *core.ResourceState) error {
+	return p.api.DeleteStorage(ctx, state.ExternalID)
+}
+
+// storageOptionsFromInputs maps Scute inputs to ClusterStorageOptions.
+func storageOptionsFromInputs(inputs core.Inputs, name string) []proxmox.ClusterStorageOptions {
+	var opts []proxmox.ClusterStorageOptions
+
+	opts = append(opts, proxmox.ClusterStorageOptions{Name: "storage", Value: name})
+
+	if v, ok := inputs["type"].(string); ok && v != "" {
+		opts = append(opts, proxmox.ClusterStorageOptions{Name: "type", Value: v})
+	}
+	if v, ok := inputs["content"].(string); ok && v != "" {
+		opts = append(opts, proxmox.ClusterStorageOptions{Name: "content", Value: v})
+	}
+	if v, ok := inputs["path"].(string); ok && v != "" {
+		opts = append(opts, proxmox.ClusterStorageOptions{Name: "path", Value: v})
+	}
+	if v, ok := inputs["server"].(string); ok && v != "" {
+		opts = append(opts, proxmox.ClusterStorageOptions{Name: "server", Value: v})
+	}
+	if v, ok := inputs["export"].(string); ok && v != "" {
+		opts = append(opts, proxmox.ClusterStorageOptions{Name: "export", Value: v})
+	}
+	if v, ok := inputs["nodes"].(string); ok && v != "" {
+		opts = append(opts, proxmox.ClusterStorageOptions{Name: "nodes", Value: v})
+	}
+
+	return opts
+}
+
+// ── Network resource handlers ───────────────────────────────────────────────
+
+func (p *ProxmoxProvider) createNetwork(ctx context.Context, args core.ResourceArgs) (*core.ResourceState, error) {
+	cfg := networkCfgFromInputs(args.Inputs, args.Name)
+
+	if err := p.api.CreateNetwork(ctx, cfg); err != nil {
+		return nil, err
+	}
+	if err := p.api.ReloadNetwork(ctx); err != nil {
+		return nil, err
+	}
+
+	// ExternalID = "<node>/<iface>" since iface names are per-node.
+	externalID := p.node + "/" + cfg.Iface
+	return &core.ResourceState{
+		ID:         proxmoxResourceID(args),
+		Type:       args.Type,
+		Name:       args.Name,
+		Status:     core.StatusRunning,
+		Inputs:     args.Inputs,
+		Outputs:    core.Outputs{"iface": cfg.Iface, "node": p.node},
+		ExternalID: externalID,
+		ProviderID: "proxmox",
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	}, nil
+}
+
+func (p *ProxmoxProvider) readNetwork(ctx context.Context, id core.ResourceID, externalID string) (*core.ResourceState, error) {
+	_, iface, err := splitNetworkID(externalID)
+	if err != nil {
+		return nil, err
+	}
+
+	cfg, err := p.api.ReadNetwork(ctx, iface)
+	if err != nil {
+		return nil, err
+	}
+	if cfg == nil {
+		return nil, nil
+	}
+
+	nodeName, _, _ := splitNetworkID(externalID)
+	return &core.ResourceState{
+		ID:         id,
+		Type:       "proxmox:network",
+		ExternalID: externalID,
+		ProviderID: "proxmox",
+		Status:     core.StatusRunning,
+		Inputs: core.Inputs{
+			"iface":        cfg.Iface,
+			"type":         cfg.Type,
+			"cidr":         cfg.CIDR,
+			"gateway":      cfg.Gateway,
+			"bridge_ports": cfg.BridgePorts,
+			"comments":     cfg.Comments,
+			"autostart":    cfg.Autostart,
+		},
+		Outputs:   core.Outputs{"iface": cfg.Iface, "node": nodeName},
+		UpdatedAt: time.Now(),
+	}, nil
+}
+
+func (p *ProxmoxProvider) updateNetwork(ctx context.Context, current *core.ResourceState, desired core.ResourceArgs) (*core.ResourceState, error) {
+	_, iface, err := splitNetworkID(current.ExternalID)
+	if err != nil {
+		return nil, err
+	}
+
+	cfg := networkCfgFromInputs(desired.Inputs, iface)
+	if err := p.api.UpdateNetwork(ctx, iface, cfg); err != nil {
+		return nil, err
+	}
+	if err := p.api.ReloadNetwork(ctx); err != nil {
+		return nil, err
+	}
+
+	return p.readNetwork(ctx, proxmoxResourceID(desired), current.ExternalID)
+}
+
+func (p *ProxmoxProvider) deleteNetwork(ctx context.Context, state *core.ResourceState) error {
+	_, iface, err := splitNetworkID(state.ExternalID)
+	if err != nil {
+		return err
+	}
+
+	if err := p.api.DeleteNetwork(ctx, iface); err != nil {
+		return err
+	}
+	return p.api.ReloadNetwork(ctx)
+}
+
+// networkCfgFromInputs builds a NetworkConfig from Scute inputs.
+func networkCfgFromInputs(inputs core.Inputs, name string) NetworkConfig {
+	return NetworkConfig{
+		Iface:       getStringInputFallback(inputs, "iface", name),
+		Type:        getStringInputFallback(inputs, "type", "bridge"),
+		CIDR:        func() string { v, _ := inputs["cidr"].(string); return v }(),
+		Gateway:     func() string { v, _ := inputs["gateway"].(string); return v }(),
+		BridgePorts: func() string { v, _ := inputs["bridge_ports"].(string); return v }(),
+		Comments:    func() string { v, _ := inputs["comments"].(string); return v }(),
+		Autostart:   func() bool { v, _ := inputs["autostart"].(bool); return v }(),
+	}
+}
+
+// splitNetworkID splits "<node>/<iface>" externalID into its parts.
+func splitNetworkID(externalID string) (nodeName, iface string, err error) {
+	idx := strings.LastIndex(externalID, "/")
+	if idx <= 0 {
+		return "", "", fmt.Errorf("proxmox: invalid network externalID %q (expected <node>/<iface>)", externalID)
+	}
+	return externalID[:idx], externalID[idx+1:], nil
 }

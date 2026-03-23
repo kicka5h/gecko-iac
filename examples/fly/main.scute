@@ -1,0 +1,49 @@
+territory "fly-demo"
+  workspace: "dev"
+end
+
+store "local"
+end
+
+habitat "fly"
+  api_token: env("FLY_API_TOKEN")
+  org:       env("FLY_ORG") | "personal"
+  region:    env("FLY_REGION") | "sjc"
+end
+
+mark app_name string: "my-api"
+mark region   string: "sjc"
+
+spawn "fly:app" as "api"
+  name: app_name
+  org:  "personal"
+end
+
+spawn "fly:machine" as "api-web"
+  needs: @api
+  app:    @api.name
+  image:  "registry.fly.io/my-api:latest"
+  size:   "shared-cpu-1x"
+  region: region
+  memory: 256
+end
+
+spawn "fly:volume" as "api-data"
+  needs:  @api
+  app:    @api.name
+  name:   "data"
+  region: region
+  size:   1
+end
+
+spawn "fly:secret" as "db-url"
+  needs: @api
+  app:   @api.name
+  key:   "DATABASE_URL"
+  value: secret("fly.db_url")
+end
+
+signal "app_url"
+  value:       "https://#{app_name}.fly.dev"
+  description: "Public URL of the Fly app"
+end

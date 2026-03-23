@@ -491,27 +491,25 @@ export "%s"
   end
 
   # ── Resources this snack spawns ───────────────────────────────────────────────
-  spawn "k8s:namespace" as "ns"
+  spawn "proxmox:vm" as "web"
+    node:   "pve"
     name:   namespace
-    labels: labels
+    cores:  2
+    memory: 4096
+    clone:  image
+    tags:   labels
   end
 
-  spawn "k8s:deployment" as "app"
-    needs:     @ns
-    namespace: @ns.name
-    image:     image
-    replicas:  replicas
-
-    ports:
-      container_port: port
-    end
+  spawn "proxmox:network" as "net"
+    needs: @web
+    node:  "pve"
+    iface: "vmbr1"
+    cidr:  "10.10.10.1/24"
   end
 
-  spawn "k8s:service" as "svc"
-    needs:       @app
-    namespace:   @ns.name
-    port:        port
-    target_port: port
+  spawn "fly:app" as "app"
+    name:   namespace
+    org:    "personal"
   end
 
   # ── Emitted values (accessible as %s.signal_name) ─────────────────────────────

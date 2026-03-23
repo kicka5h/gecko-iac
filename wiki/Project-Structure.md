@@ -51,9 +51,11 @@ Everything lives in `.scute` files — there is no separate `gecko.json`. Provid
 store "local"
 end
 
-habitat "k8s"
-  kubeconfig: env("KUBECONFIG") | "~/.kube/config"
-  context:    env("KUBE_CONTEXT") | "homelab"
+habitat "proxmox"
+  endpoint:     env("PROXMOX_ENDPOINT") | "https://192.168.1.100:8006"
+  token_id:     env("PROXMOX_TOKEN_ID")
+  token_secret: env("PROXMOX_TOKEN_SECRET")
+  node:         env("PROXMOX_NODE") | "pve"
 end
 ```
 

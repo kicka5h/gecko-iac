@@ -64,8 +64,8 @@ go install github.com/gecko-iac/gecko@latest
 # Install
 go install github.com/gecko-iac/gecko@latest
 
-# Create a new project with Kubernetes + Proxmox
-gecko hatch my-homelab --providers k8s,proxmox --workspace dev
+# Create a new project with Proxmox + Fly.io
+gecko hatch my-homelab --providers proxmox,fly --workspace dev
 
 # Preview what Gecko would do
 gecko crawl
@@ -74,13 +74,13 @@ gecko crawl
 gecko grip
 
 # Watch live logs
-gecko tail --resource k8s:deployment.api-server --follow
+gecko tail --resource fly:machine.web --follow
 
 # Check status
 gecko bask
 
 # Inspect a specific resource
-gecko lick k8s:deployment.api-server
+gecko lick proxmox:vm.web-01
 ```
 
 ---
@@ -122,79 +122,76 @@ territory "my-homelab"
 end
 
 # Provider configuration
-habitat "k8s"
-  kubeconfig: "~/.kube/config"
-  context:    "homelab"
+habitat "proxmox"
+  endpoint:     env("PROXMOX_ENDPOINT")
+  token_id:     env("PROXMOX_TOKEN_ID")
+  token_secret: env("PROXMOX_TOKEN_SECRET")
+  node:         "pve"
+  insecure:     true
+end
+
+habitat "fly"
+  api_token: env("FLY_API_TOKEN")
+  org:       "personal"
+  region:    "sjc"
 end
 
 # Input variables (overridable via GECKO_VAR_* env or --var flag)
-mark replicas number: 1
+mark vm_memory number: 2048
 mark base_domain string: "homelab.local"
 
 # Computed locals
 camouflage
-  is_prod:     workspace == "prod"
-  app_replicas: is_prod ? 3 : replicas
+  is_prod:   workspace == "prod"
+  vm_cores:  is_prod ? 4 : 2
 end
 
-# Kubernetes namespace
-spawn "k8s:namespace" as "monitoring-ns"
-  name:   "monitoring"
-  labels:
-    managed-by: "gecko"
-    env:        workspace
-  end
+# Network bridge for VMs
+spawn "proxmox:network" as "vm-bridge"
+  iface:        "vmbr1"
+  type:         "bridge"
+  bridge_ports: "eth1"
+  autostart:    true
+  comments:     "VM bridge managed by gecko"
 end
 
-# Prometheus — depends on the namespace via @monitoring-ns
-spawn "k8s:deployment" as "prometheus"
-  needs:     @monitoring-ns
-  namespace: @monitoring-ns.name
-  image:     "prom/prometheus:v2.50.0"
-  replicas:  app_replicas
-  ports:     [9090]
+# Web server VM
+spawn "proxmox:vm" as "web-01"
+  needs:     @vm-bridge
+  name:      "web-01"
+  memory:    vm_memory
+  cores:     vm_cores
+  disk_size: "20G"
+  storage:   "local-lvm"
+  iso:       "local:iso/debian-12-amd64-netinst.iso"
+  net0:      "virtio,bridge=vmbr1"
+  start:     false
 end
 
-spawn "k8s:service" as "prometheus-svc"
-  needs:     @prometheus
-  namespace: @monitoring-ns.name
-  port:      9090
+# Fly.io app for the public-facing API
+spawn "fly:app" as "api"
+  name: "my-homelab-api"
+  org:  "personal"
 end
 
-# Grafana — references Prometheus outputs
-spawn "k8s:deployment" as "grafana"
-  needs:     @prometheus
-  namespace: @monitoring-ns.name
-  image:     "grafana/grafana:10.3.0"
-  replicas:  app_replicas
-  ports:     [3000]
-
-  env:
-    GF_SECURITY_ADMIN_PASSWORD: secret("grafana.admin.password")
-    GF_SERVER_ROOT_URL:         "https://grafana.#{base_domain}"
-  end
-
-  when is_prod
-    resources:
-      memory: "512Mi"
-      cpu:    "500m"
-    end
-  else
-    resources:
-      memory: "256Mi"
-      cpu:    "250m"
-    end
-  end
+spawn "fly:machine" as "api-web"
+  needs:  @api
+  app:    @api.name
+  image:  "registry.fly.io/my-api:latest"
+  size:   "shared-cpu-1x"
+  region: "sjc"
+  memory: 256
 end
 
 # Stack outputs
-signal "grafana_url"
-  value:       "https://grafana.#{base_domain}"
-  description: "Grafana dashboard endpoint"
+signal "vm_name"
+  value:       @web-01.name
+  description: "Proxmox VM name"
 end
 
-signal "prometheus_url"
-  value: "http://#{@prometheus-svc.cluster_ip}:9090"
+signal "api_url"
+  value:       "https://my-homelab-api.fly.dev"
+  description: "Public API endpoint"
 end
 ```
 
@@ -202,20 +199,16 @@ end
 
 ## FOSS Provider Ecosystem
 
-Gecko ships with providers for the best open-source infrastructure tools:
+Gecko ships with providers for open-source cloud platforms:
 
 | Provider | Resources | Notes |
 |---|---|---|
-| **kubernetes** | 22 resource types | Works with k3s, k0s, Talos, kubeadm |
 | **proxmox** | VMs, LXC, storage, networks | Full Proxmox VE 8.x support |
-| **nomad** | Jobs, namespaces, volumes | HashiCorp Nomad clusters |
-| **gitea** | Repos, orgs, users, webhooks, runners | Self-hosted Git forge |
-| **minio** | Buckets, policies, users | S3-compatible object storage |
-| **vault** | Secrets, policies, auth methods | HashiCorp Vault |
-| **keycloak** | Realms, clients, users, roles | Identity and SSO |
-| **wireguard** | Peers, networks | VPN mesh networking |
-| **nfs** | Exports, mounts | Network file systems |
-| **postgresql** | Databases, roles, extensions | Managed Postgres |
+| **fly** | Apps, machines, volumes, secrets | Fly.io Machines API |
+| **openstack** | Instances, networks, subnets, security groups, volumes | OpenStack IaaS |
+| **hostinger** | VPS, domains | Hostinger VPS hosting |
+| **ubicloud** | VMs, firewalls, subnets | Open-source cloud platform |
+| **opennebula** | VMs, vnets, images, templates | Cloud and edge computing |
 
 ---
 
@@ -309,8 +302,8 @@ Resources with known Gecko equivalents are emitted as `spawn` blocks. Resources 
 
 | Source | Covered providers |
 | --- | --- |
-| Terraform | `hashicorp/kubernetes`, `hashicorp/vault`, `hashicorp/nomad`, `gitea`, `minio`, `postgresql` |
-| Pulumi | `kubernetes`, `vault`, `nomad` |
+| Terraform | `proxmox`, `fly`, `openstack`, `opennebula`, `gitea`, `minio`, `postgresql` |
+| Pulumi | `openstack` |
 
 After generating the file, review it, fill in your `habitat` credentials, then run `gecko crawl` to see the diff and `gecko grip` to take ownership.
 
@@ -325,18 +318,24 @@ After generating the file, review it, fill in your `habitat` credentials, then r
 import gecko
 
 stack = gecko.Stack(name="my-homelab", workspace="dev")
-stack.register_provider(gecko.providers.k8s(kubeconfig="~/.kube/config"))
+stack.register_provider(gecko.providers.proxmox(
+    endpoint="https://proxmox.local:8006",
+    token_id="root@pam!gecko",
+    token_secret=os.environ["PROXMOX_TOKEN_SECRET"],
+    node="pve",
+))
 
-ns = stack.resource("k8s:namespace", name="monitoring", inputs={
-    "name": "monitoring",
-    "labels": {"managed-by": "gecko"},
+net = stack.resource("proxmox:network", name="vm-bridge", inputs={
+    "iface": "vmbr1",
+    "type":  "bridge",
+    "autostart": True,
 })
 
-stack.resource("k8s:deployment", name="prometheus", depends_on=[ns], inputs={
-    "namespace": "monitoring",
-    "image":     "prom/prometheus:v2.50.0",
-    "replicas":  1,
-    "ports":     [9090],
+stack.resource("proxmox:vm", name="web-01", depends_on=[net], inputs={
+    "name":   "web-01",
+    "memory": 2048,
+    "cores":  2,
+    "net0":   "virtio,bridge=vmbr1",
 })
 ```
 
@@ -345,17 +344,21 @@ stack.resource("k8s:deployment", name="prometheus", depends_on=[ns], inputs={
 import * as gecko from "@gecko-iac/gecko";
 
 const stack = new gecko.Stack({ name: "my-homelab", workspace: "dev" });
-stack.registerProvider(new gecko.providers.k8s.Provider({ kubeconfig: "~/.kube/config" }));
+stack.registerProvider(new gecko.providers.fly.Provider({
+  apiToken: process.env.FLY_API_TOKEN,
+  org: "personal",
+  region: "sjc",
+}));
 
-const ns = stack.resource("k8s:namespace", {
-  name: "monitoring",
-  inputs: { name: "monitoring", labels: { "managed-by": "gecko" } },
+const app = stack.resource("fly:app", {
+  name: "my-api",
+  inputs: { name: "my-api", org: "personal" },
 });
 
-stack.resource("k8s:deployment", {
-  name: "prometheus",
-  dependsOn: [ns],
-  inputs: { namespace: "monitoring", image: "prom/prometheus:v2.50.0", replicas: 1 },
+stack.resource("fly:machine", {
+  name: "web",
+  dependsOn: [app],
+  inputs: { app: "my-api", image: "registry.fly.io/my-api:latest", size: "shared-cpu-1x" },
 });
 ```
 
@@ -386,7 +389,7 @@ All three runtimes produce the same resource graph and share the same state form
                      │
 ┌────────────────────▼────────────────────────────┐
 │              Provider Layer                      │
-│   k8s   proxmox   nomad   gitea   minio   vault  │
+│  proxmox  fly  openstack  hostinger  ubicloud  opennebula │
 └─────────────────────────────────────────────────┘
 ```
 

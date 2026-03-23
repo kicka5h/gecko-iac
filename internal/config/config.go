@@ -141,8 +141,8 @@ func DefaultProjectConfig(name string) *ProjectConfig {
 		Workspace: "dev",
 		Workspaces: []string{"dev", "staging", "prod"},
 		Providers: map[string]ProviderConfig{
-			"k8s": {
-				Type:    "kubernetes",
+			"proxmox": {
+				Type:    "proxmox",
 				Version: ">=1.28",
 				Config: map[string]interface{}{
 					"kubeconfig": "~/.kube/config",

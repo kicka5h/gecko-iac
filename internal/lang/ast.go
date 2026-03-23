@@ -37,8 +37,8 @@ func (b *TerritoryBlock) nodeString() string { return fmt.Sprintf("territory %q"
 
 // HabitatBlock is a provider configuration block
 //
-//	habitat "k8s"
-//	  kubeconfig: "~/.kube/config"
+//	habitat "proxmox"
+//	  endpoint: "https://pve.example.com:8006"
 //	end
 type HabitatBlock struct {
 	Pos    Pos
@@ -51,7 +51,7 @@ func (b *HabitatBlock) nodeString() string { return fmt.Sprintf("habitat %q", b.
 
 // SpawnBlock declares a managed resource
 //
-//	spawn "k8s:namespace" as "monitoring"
+//	spawn "proxmox:vm" as "webserver"
 //	  name: app
 //	  when debug
 //	    log_level: "debug"
@@ -61,8 +61,8 @@ func (b *HabitatBlock) nodeString() string { return fmt.Sprintf("habitat %q", b.
 // Protected variant: spawn! (cannot be molted/destroyed)
 type SpawnBlock struct {
 	Pos       Pos
-	TypeStr   string // e.g. "k8s:namespace"
-	Name      string // e.g. "monitoring"
+	TypeStr   string // e.g. "proxmox:vm"
+	Name      string // e.g. "webserver"
 	Across    Node   // if non-nil: iteration expression
 	Protected bool   // spawn! syntax
 	Fields    []*Field
@@ -369,7 +369,7 @@ func (f *SnackFile) nodeString() string { return fmt.Sprintf("snack(%d exports)"
 //	export "monitoring-stack"
 //	  param namespace  string: "monitoring"
 //	  param replicas   number: 2
-//	  spawn "k8s:namespace" as "ns"
+//	  spawn "proxmox:network" as "ns"
 //	    name: namespace
 //	  end
 //	  emit "endpoint"

@@ -1,0 +1,44 @@
+territory "opennebula-lab"
+  workspace: "dev"
+end
+
+store "local"
+end
+
+habitat "opennebula"
+  endpoint: env("ONE_XMLRPC") | "http://localhost:2633/RPC2"
+  username: env("ONE_USERNAME") | "oneadmin"
+  password: secret("opennebula.password")
+end
+
+spawn "opennebula:vnet" as "private-net"
+  name:   "private-network"
+  bridge: "br0"
+end
+
+spawn "opennebula:image" as "ubuntu"
+  name: "ubuntu-22.04"
+  type: "OS"
+  path: "/var/lib/one/images/ubuntu-22.04.qcow2"
+  size: 10240
+end
+
+spawn "opennebula:template" as "web-tmpl"
+  needs:       @ubuntu
+  name:        "web-template"
+  description: "Template for web servers"
+  cpu:         2
+  memory:      2048
+end
+
+spawn "opennebula:vm" as "web-01"
+  needs:  @web-tmpl, @private-net
+  name:   "web-01"
+  cpu:    2
+  memory: 2048
+end
+
+signal "vm_id"
+  value:       @web-01.id
+  description: "OpenNebula VM ID"
+end

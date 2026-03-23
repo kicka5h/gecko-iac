@@ -9,7 +9,7 @@ import (
 	"github.com/gecko-iac/gecko/internal/core"
 	"github.com/gecko-iac/gecko/internal/lang"
 	"github.com/gecko-iac/gecko/internal/ui"
-	k8sprovider "github.com/gecko-iac/gecko/providers/foss"
+	fossprovider "github.com/gecko-iac/gecko/providers/foss"
 )
 
 // ─── gecko molt ───────────────────────────────────────────────────────────────
@@ -62,44 +62,53 @@ func runMolt(args []string, flags map[string]string) error {
 	for _, hint := range loaded.ProviderHints {
 		lname := strings.ToLower(hint.Name)
 		switch lname {
-		case "k8s", "kubernetes":
-			p := k8sprovider.NewProvider(hint.Config)
-			if err := p.Configure(ctx, hint.Config); err != nil {
-				spin.Stop(false)
-				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
-				spin = ui.NewSpinner("Configuring providers")
-				spin.Start()
-			}
-			loaded.Stack.RegisterProvider(p)
-		case "kind":
-			p := k8sprovider.NewKindProvider(hint.Config)
-			if err := p.Configure(ctx, hint.Config); err != nil {
-				spin.Stop(false)
-				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
-				spin = ui.NewSpinner("Configuring providers")
-				spin.Start()
-			}
-			loaded.Stack.RegisterProvider(p)
-		case "vault":
-			p := k8sprovider.NewVaultProvider(hint.Config)
-			if err := p.Configure(ctx, hint.Config); err != nil {
-				spin.Stop(false)
-				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
-				spin = ui.NewSpinner("Configuring providers")
-				spin.Start()
-			}
-			loaded.Stack.RegisterProvider(p)
-		case "nomad":
-			p := k8sprovider.NewNomadProvider(hint.Config)
-			if err := p.Configure(ctx, hint.Config); err != nil {
-				spin.Stop(false)
-				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
-				spin = ui.NewSpinner("Configuring providers")
-				spin.Start()
-			}
-			loaded.Stack.RegisterProvider(p)
 		case "proxmox":
-			p := k8sprovider.NewProxmoxProvider(hint.Config)
+			p := fossprovider.NewProxmoxProvider(hint.Config)
+			if err := p.Configure(ctx, hint.Config); err != nil {
+				spin.Stop(false)
+				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
+				spin = ui.NewSpinner("Configuring providers")
+				spin.Start()
+			}
+			loaded.Stack.RegisterProvider(p)
+		case "fly":
+			p := fossprovider.NewFlyProvider(hint.Config)
+			if err := p.Configure(ctx, hint.Config); err != nil {
+				spin.Stop(false)
+				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
+				spin = ui.NewSpinner("Configuring providers")
+				spin.Start()
+			}
+			loaded.Stack.RegisterProvider(p)
+		case "openstack":
+			p := fossprovider.NewOpenStackProvider(hint.Config)
+			if err := p.Configure(ctx, hint.Config); err != nil {
+				spin.Stop(false)
+				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
+				spin = ui.NewSpinner("Configuring providers")
+				spin.Start()
+			}
+			loaded.Stack.RegisterProvider(p)
+		case "hostinger":
+			p := fossprovider.NewHostingerProvider(hint.Config)
+			if err := p.Configure(ctx, hint.Config); err != nil {
+				spin.Stop(false)
+				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
+				spin = ui.NewSpinner("Configuring providers")
+				spin.Start()
+			}
+			loaded.Stack.RegisterProvider(p)
+		case "ubicloud":
+			p := fossprovider.NewUbicloudProvider(hint.Config)
+			if err := p.Configure(ctx, hint.Config); err != nil {
+				spin.Stop(false)
+				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
+				spin = ui.NewSpinner("Configuring providers")
+				spin.Start()
+			}
+			loaded.Stack.RegisterProvider(p)
+		case "opennebula":
+			p := fossprovider.NewOpenNebulaProvider(hint.Config)
 			if err := p.Configure(ctx, hint.Config); err != nil {
 				spin.Stop(false)
 				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
@@ -337,7 +346,7 @@ Shows inputs, outputs, dependencies, drift status, and recent events.`,
 func runLick(args []string, flags map[string]string) error {
 	ui.PrintBannerSmall("lick")
 
-	resource := "k8s:deployment.api-server"
+	resource := "proxmox:vm.web-01"
 	if len(args) > 0 {
 		resource = args[0]
 	}
@@ -345,7 +354,7 @@ func runLick(args []string, flags map[string]string) error {
 	fmt.Printf("  %s%s%s\n\n", ui.BrightWhite+ui.Bold, resource, ui.Reset)
 
 	ui.Header("Identity")
-	ui.Label("Type", "k8s:deployment")
+	ui.Label("Type", "proxmox:vm")
 	ui.Label("Name", "api-server")
 	ui.Label("Workspace", "dev")
 	ui.Label("External ID", "default/api-server")
@@ -370,8 +379,8 @@ func runLick(args []string, flags map[string]string) error {
 	ui.Label("pod_selector", "app=api-server")
 
 	ui.Header("Dependencies")
-	fmt.Printf("  %s↳%s k8s:namespace.default\n", ui.GeckoGreen, ui.Reset)
-	fmt.Printf("  %s↳%s k8s:configmap.app-config\n", ui.GeckoGreen, ui.Reset)
+	fmt.Printf("  %s↳%s proxmox:network.vm-bridge\n", ui.GeckoGreen, ui.Reset)
+	fmt.Printf("  %s↳%s proxmox:storage.local-lvm\n", ui.GeckoGreen, ui.Reset)
 	fmt.Println()
 
 	ui.Header("Drift Detection")

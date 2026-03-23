@@ -13,7 +13,7 @@ import (
 	"github.com/gecko-iac/gecko/internal/lang"
 	"github.com/gecko-iac/gecko/internal/state"
 	"github.com/gecko-iac/gecko/internal/ui"
-	k8sprovider "github.com/gecko-iac/gecko/providers/foss"
+	fossprovider "github.com/gecko-iac/gecko/providers/foss"
 )
 
 var crawlCmd = &Command{
@@ -72,44 +72,53 @@ func runCrawl(args []string, flags map[string]string) error {
 	for _, hint := range loaded.ProviderHints {
 		lname := strings.ToLower(hint.Name)
 		switch lname {
-		case "k8s", "kubernetes":
-			p := k8sprovider.NewProvider(hint.Config)
-			if err := p.Configure(ctx, hint.Config); err != nil {
-				spin.Stop(false)
-				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
-				spin = ui.NewSpinner("Configuring providers")
-				spin.Start()
-			}
-			loaded.Stack.RegisterProvider(p)
-		case "kind":
-			p := k8sprovider.NewKindProvider(hint.Config)
-			if err := p.Configure(ctx, hint.Config); err != nil {
-				spin.Stop(false)
-				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
-				spin = ui.NewSpinner("Configuring providers")
-				spin.Start()
-			}
-			loaded.Stack.RegisterProvider(p)
-		case "vault":
-			p := k8sprovider.NewVaultProvider(hint.Config)
-			if err := p.Configure(ctx, hint.Config); err != nil {
-				spin.Stop(false)
-				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
-				spin = ui.NewSpinner("Configuring providers")
-				spin.Start()
-			}
-			loaded.Stack.RegisterProvider(p)
-		case "nomad":
-			p := k8sprovider.NewNomadProvider(hint.Config)
-			if err := p.Configure(ctx, hint.Config); err != nil {
-				spin.Stop(false)
-				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
-				spin = ui.NewSpinner("Configuring providers")
-				spin.Start()
-			}
-			loaded.Stack.RegisterProvider(p)
 		case "proxmox":
-			p := k8sprovider.NewProxmoxProvider(hint.Config)
+			p := fossprovider.NewProxmoxProvider(hint.Config)
+			if err := p.Configure(ctx, hint.Config); err != nil {
+				spin.Stop(false)
+				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
+				spin = ui.NewSpinner("Configuring providers")
+				spin.Start()
+			}
+			loaded.Stack.RegisterProvider(p)
+		case "fly":
+			p := fossprovider.NewFlyProvider(hint.Config)
+			if err := p.Configure(ctx, hint.Config); err != nil {
+				spin.Stop(false)
+				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
+				spin = ui.NewSpinner("Configuring providers")
+				spin.Start()
+			}
+			loaded.Stack.RegisterProvider(p)
+		case "openstack":
+			p := fossprovider.NewOpenStackProvider(hint.Config)
+			if err := p.Configure(ctx, hint.Config); err != nil {
+				spin.Stop(false)
+				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
+				spin = ui.NewSpinner("Configuring providers")
+				spin.Start()
+			}
+			loaded.Stack.RegisterProvider(p)
+		case "hostinger":
+			p := fossprovider.NewHostingerProvider(hint.Config)
+			if err := p.Configure(ctx, hint.Config); err != nil {
+				spin.Stop(false)
+				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
+				spin = ui.NewSpinner("Configuring providers")
+				spin.Start()
+			}
+			loaded.Stack.RegisterProvider(p)
+		case "ubicloud":
+			p := fossprovider.NewUbicloudProvider(hint.Config)
+			if err := p.Configure(ctx, hint.Config); err != nil {
+				spin.Stop(false)
+				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
+				spin = ui.NewSpinner("Configuring providers")
+				spin.Start()
+			}
+			loaded.Stack.RegisterProvider(p)
+		case "opennebula":
+			p := fossprovider.NewOpenNebulaProvider(hint.Config)
 			if err := p.Configure(ctx, hint.Config); err != nil {
 				spin.Stop(false)
 				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
@@ -166,7 +175,7 @@ func runCrawl(args []string, flags map[string]string) error {
 
 	// Render diffs grouped by kind
 	for _, diff := range plan.Diffs {
-		// Extract type and name from ResourceID ("k8s:deployment::nginx")
+		// Extract type and name from ResourceID ("proxmox:vm::web-01")
 		rType, rName := splitResourceID(string(diff.ResourceID))
 
 		switch diff.Kind {
@@ -252,7 +261,7 @@ func runCrawl(args []string, flags map[string]string) error {
 	return nil
 }
 
-// splitResourceID splits "k8s:deployment::nginx" into ("k8s:deployment", "nginx")
+// splitResourceID splits "proxmox:vm::web-01" into ("proxmox:vm", "web-01")
 func splitResourceID(id string) (resourceType, name string) {
 	idx := strings.LastIndex(id, "::")
 	if idx < 0 {

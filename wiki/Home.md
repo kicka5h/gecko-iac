@@ -41,17 +41,12 @@ Welcome to the Gecko documentation. Gecko is a **FOSS-first Infrastructure as Co
 ## Providers
 
 - [Provider Overview](Providers) — All supported FOSS providers
-- [Kubernetes](Provider-Kubernetes) — k8s, k3s, k0s, Talos
-- [kind](Provider-kind) — Local k8s clusters via kind
 - [Proxmox](Provider-Proxmox) — VMs, LXC, storage, networks
-- [Nomad](Provider-Nomad) — Jobs, namespaces, ACL policies
-- [Vault](Provider-Vault) — Secrets, policies, auth methods
-- [Gitea](Provider-Gitea) — Repos, orgs, users, webhooks
-- [MinIO](Provider-MinIO) — Buckets, policies, users
-- [Keycloak](Provider-Keycloak) — Realms, clients, users, roles
-- [WireGuard](Provider-WireGuard) — VPN peers and networks
-- [NFS](Provider-NFS) — Exports and mounts
-- [PostgreSQL](Provider-PostgreSQL) — Databases, roles, extensions
+- [Fly](Provider-Fly) — Apps, machines, volumes, secrets
+- [OpenStack](Provider-OpenStack) — Instances, networks, subnets, security groups, volumes
+- [Hostinger](Provider-Hostinger) — VPS, domains
+- [Ubicloud](Provider-Ubicloud) — VMs, firewalls, subnets
+- [OpenNebula](Provider-OpenNebula) — VMs, vnets, images, templates
 - [Building a Provider](Building-a-Provider) — Implement `core.Provider`
 
 ## State & Backends

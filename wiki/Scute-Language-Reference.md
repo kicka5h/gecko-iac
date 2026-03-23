@@ -68,17 +68,18 @@ end
 
 ## habitat
 
-Configures a provider. The string after `habitat` is the provider name (`k8s`, `vault`, `nomad`, etc.).
+Configures a provider. The string after `habitat` is the provider name (`proxmox`, `fly`, etc.).
 
 ```scute
-habitat "k8s"
-  kubeconfig: "~/.kube/config"
-  context:    "homelab"
+habitat "proxmox"
+  endpoint:  "https://pve.local:8006"
+  api_token: env("PROXMOX_API_TOKEN")
+  node:      "pve1"
 end
 
-habitat "vault"
-  address: "https://vault.local:8200"
-  token:   env("VAULT_TOKEN")
+habitat "fly"
+  api_token: env("FLY_API_TOKEN")
+  region:    "ord"
 end
 ```
 
@@ -132,11 +133,15 @@ end
 Declares a managed resource. The type string is `provider:resource_type`.
 
 ```scute
-spawn "k8s:deployment" as "nginx"
-  namespace: "default"
-  image:     "nginx:1.25"
-  replicas:  2
-  ports:     [80, 443]
+spawn "fly:app" as "web-app"
+  name: "my-app"
+end
+
+spawn "proxmox:vm" as "web-server"
+  node:   "pve1"
+  cores:  2
+  memory: 2048
+  disk:   "32G"
 end
 ```
 
@@ -145,11 +150,10 @@ end
 Use `spawn!` to force destruction and recreation on any change (instead of in-place update):
 
 ```scute
-spawn! "k8s:configmap" as "app-config"
-  name: "app-config"
-  data:
-    key: "value"
-  end
+spawn! "fly:secret" as "app-config"
+  app:   "my-app"
+  key:   "DATABASE_URL"
+  value: secret("db.url")
 end
 ```
 
@@ -158,9 +162,9 @@ end
 `needs:` declares an explicit dependency. Gecko ensures the referenced resource exists before creating this one.
 
 ```scute
-spawn "k8s:deployment" as "app"
-  needs:     @db
-  namespace: @db.namespace
+spawn "fly:machine" as "app"
+  needs: @db
+  app:   @db.app
 end
 ```
 
@@ -177,9 +181,9 @@ Multiple dependencies:
 Reference another resource's outputs using `@name` or `@name.field`:
 
 ```scute
-spawn "k8s:service" as "db-svc"
-  namespace: @db.namespace
-  port:      @db.port
+spawn "proxmox:vm" as "db-server"
+  node:   @db.node
+  memory: @db.memory
 end
 ```
 
@@ -239,11 +243,12 @@ end
 Iterate over a list to create multiple resources:
 
 ```scute
-mark namespaces list: ["monitoring", "logging", "ingress"]
+mark services list: ["web", "api", "worker"]
 
-across namespaces as item
-  spawn "k8s:namespace" as "ns-#{item}"
-    name: item
+across services as item
+  spawn "fly:machine" as "svc-#{item}"
+    app:   "my-app"
+    image: "myorg/#{item}:latest"
   end
 end
 ```
@@ -268,7 +273,7 @@ Falls back to the environment variable `GECKO_SECRET_<KEY>` (uppercased, dots re
 Read an environment variable at plan/apply time:
 
 ```scute
-  token: env("VAULT_TOKEN")
+  token: env("PROXMOX_TOKEN_SECRET")
   host:  env("DB_HOST") | "localhost"
 ```
 
@@ -303,4 +308,4 @@ View outputs: `gecko bask --outputs`
 
 ## Full example
 
-See [`examples/k8s-homelab/stacks/dev/main.scute`](https://github.com/kicka5h/gecko-iac/tree/main/examples/k8s-homelab) in the repository.
+See [`examples/fly-homelab/stacks/dev/main.scute`](https://github.com/kicka5h/gecko-iac/tree/main/examples/fly-homelab) in the repository.

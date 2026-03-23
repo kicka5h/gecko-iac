@@ -74,15 +74,30 @@ func renderHabitat(provider string) string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("habitat %q\n", provider))
 	switch provider {
-	case "k8s":
-		sb.WriteString("  kubeconfig: \"~/.kube/config\"\n")
-		sb.WriteString("  # context: \"my-context\"\n")
-	case "vault":
-		sb.WriteString("  address: env(\"VAULT_ADDR\")\n")
-		sb.WriteString("  token:   secret(\"vault.token\")\n")
-	case "nomad":
-		sb.WriteString("  address: env(\"NOMAD_ADDR\")\n")
-		sb.WriteString("  # token: secret(\"nomad.token\")\n")
+	case "proxmox":
+		sb.WriteString("  endpoint:     env(\"PROXMOX_ENDPOINT\")\n")
+		sb.WriteString("  token_id:     env(\"PROXMOX_TOKEN_ID\")\n")
+		sb.WriteString("  token_secret: secret(\"proxmox.token_secret\")\n")
+		sb.WriteString("  node:         env(\"PROXMOX_NODE\")\n")
+	case "fly":
+		sb.WriteString("  api_token: env(\"FLY_API_TOKEN\")\n")
+		sb.WriteString("  org:       \"personal\"\n")
+		sb.WriteString("  region:    \"sjc\"\n")
+	case "openstack":
+		sb.WriteString("  auth_url:    env(\"OS_AUTH_URL\")\n")
+		sb.WriteString("  username:    env(\"OS_USERNAME\")\n")
+		sb.WriteString("  password:    secret(\"openstack.password\")\n")
+		sb.WriteString("  tenant_name: env(\"OS_TENANT_NAME\")\n")
+		sb.WriteString("  region:      env(\"OS_REGION_NAME\")\n")
+	case "hostinger":
+		sb.WriteString("  api_token: env(\"HOSTINGER_API_TOKEN\")\n")
+	case "ubicloud":
+		sb.WriteString("  api_token:   env(\"UBICLOUD_API_TOKEN\")\n")
+		sb.WriteString("  project_id:  env(\"UBICLOUD_PROJECT_ID\")\n")
+	case "opennebula":
+		sb.WriteString("  endpoint: env(\"ONE_XMLRPC\")\n")
+		sb.WriteString("  username: env(\"ONE_USERNAME\")\n")
+		sb.WriteString("  password: secret(\"opennebula.password\")\n")
 	case "gitea":
 		sb.WriteString("  url:   env(\"GITEA_URL\")\n")
 		sb.WriteString("  token: secret(\"gitea.token\")\n")

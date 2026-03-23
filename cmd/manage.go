@@ -45,7 +45,7 @@ func runShed(args []string, flags map[string]string) error {
 	ui.Header("Available Updates")
 	ui.TableHeader("Package", "Current", "Latest", "Type")
 	ui.TableRow("gecko (framework)", "v0.1.0", "v0.2.0", "minor")
-	ui.TableRow("provider: kubernetes", "v0.5.2", "v0.6.0", "minor")
+	ui.TableRow("provider: fly", "v0.1.0", "v0.2.0", "minor")
 	ui.TableRow("provider: proxmox", "v0.2.1", "v0.2.3", "patch")
 	ui.TableRow("provider: gitea", "v0.1.0", "v0.1.1", "patch")
 	fmt.Println()
@@ -71,7 +71,7 @@ func runShed(args []string, flags map[string]string) error {
 
 	upgrades := []struct{ name, from, to string }{
 		{"gecko", "v0.1.0", "v0.2.0"},
-		{"provider: kubernetes", "v0.5.2", "v0.6.0"},
+		{"provider: fly", "v0.1.0", "v0.2.0"},
 		{"provider: proxmox", "v0.2.1", "v0.2.3"},
 		{"provider: gitea", "v0.1.0", "v0.1.1"},
 	}
@@ -159,7 +159,7 @@ func runHide(args []string, flags map[string]string) error {
 	default: // list
 		ui.Header("Stored Secrets")
 		ui.TableHeader("Key", "Backend", "Last Updated")
-		ui.TableRow("k8s.cluster.token", "local (encrypted)", "2 days ago")
+		ui.TableRow("proxmox.api.token_secret", "local (encrypted)", "2 days ago")
 		ui.TableRow("db.password", "local (encrypted)", "1 week ago")
 		ui.TableRow("gitea.admin.token", "local (encrypted)", "3 days ago")
 		ui.TableRow("proxmox.api.token", "local (encrypted)", "1 day ago")
@@ -199,7 +199,7 @@ func runBurrow(args []string, flags map[string]string) error {
 
 	if len(args) < 2 {
 		ui.Error("Usage: gecko burrow <resource-type> <external-id> --name <local-name>")
-		ui.Indent("Example: gecko burrow k8s:deployment default/my-existing-deploy --name my-deployment")
+		ui.Indent("Example: gecko burrow proxmox:vm 100 --name web-01")
 		fmt.Println()
 		return fmt.Errorf("resource-type and external-id required")
 	}
@@ -278,7 +278,7 @@ This is a targeted operation and does not require a full plan/apply cycle.`,
 func runScale(args []string, flags map[string]string) error {
 	ui.PrintBannerSmall("scale")
 
-	resource := "k8s:deployment.api-server"
+	resource := "proxmox:vm.web-01"
 	if len(args) > 0 {
 		resource = args[0]
 	}

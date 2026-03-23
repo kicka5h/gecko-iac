@@ -12,7 +12,7 @@ import (
 
 // ─── Resource Types ────────────────────────────────────────────────────────────
 
-// ResourceType is a namespaced string like "k8s:deployment" or "proxmox:vm"
+// ResourceType is a namespaced string like "proxmox:vm" or "fly:app"
 type ResourceType string
 
 // ResourceID uniquely identifies a resource within a stack
@@ -452,7 +452,7 @@ func (e *Engine) Apply(ctx context.Context, plan *PlanResult, onProgress func(Re
 	return result, nil
 }
 
-// providerNameForType extracts the provider name from a resource type like "k8s:deployment"
+// providerNameForType extracts the provider name from a resource type like "proxmox:vm"
 func providerNameForType(t ResourceType) string {
 	s := string(t)
 	for i, c := range s {

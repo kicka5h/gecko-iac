@@ -40,7 +40,7 @@ Initialize a new Gecko project.
 gecko hatch <project-name> [flags]
 
 Flags:
-  --providers, -p   Comma-separated providers to configure (e.g. k8s,vault)
+  --providers, -p   Comma-separated providers to configure (e.g. proxmox,fly)
   --workspace, -w   Initial workspace name (default: dev)
   --backend         State backend type: local, s3, etcd, postgres (default: local)
 ```
@@ -54,7 +54,7 @@ gecko crawl [flags]
 
 Flags:
   --workspace, -w   Target workspace (default: dev)
-  --target, -t      Limit to a specific resource (e.g. k8s:deployment.nginx)
+  --target, -t      Limit to a specific resource (e.g. fly:machine.web)
   --dir, -d         Project directory (default: .)
   --out             Save plan to file for use with gecko grip --plan
   --json            Output plan as JSON
@@ -108,7 +108,7 @@ Stream live logs from a resource.
 gecko tail [flags]
 
 Flags:
-  --resource, -r    Resource to stream logs from (e.g. k8s:deployment.nginx)
+  --resource, -r    Resource to stream logs from (e.g. fly:machine.web)
   --workspace, -w   Target workspace (default: dev)
   --follow, -f      Keep streaming (default: false)
   --lines, -n       Number of past lines to show (default: 50)

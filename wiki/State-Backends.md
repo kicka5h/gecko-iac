@@ -46,7 +46,7 @@ export GECKO_S3_SECRET_ACCESS_KEY=...
 
 ## etcd
 
-Distributed key-value store. Good for teams running etcd alongside Kubernetes.
+Distributed key-value store. Good for teams running etcd in their infrastructure.
 
 ```json
 {
@@ -91,13 +91,13 @@ State is plain JSON — no proprietary binary format. You can read, inspect, and
   "project": "my-homelab",
   "workspace": "dev",
   "resources": {
-    "k8s:namespace::monitoring": {
-      "id":          "k8s:namespace::monitoring",
-      "type":        "k8s:namespace",
-      "provider":    "k8s",
-      "external_id": "monitoring",
-      "inputs":      { "name": "monitoring" },
-      "outputs":     { "uid": "abc-123" },
+    "proxmox:vm::web-01": {
+      "id":          "proxmox:vm::web-01",
+      "type":        "proxmox:vm",
+      "provider":    "proxmox",
+      "external_id": "100",
+      "inputs":      { "name": "web-01", "memory": 2048, "cores": 2 },
+      "outputs":     { "vmid": "100", "status": "running" },
       "created_at":  "2026-03-01T12:00:00Z",
       "updated_at":  "2026-03-01T12:00:00Z"
     }

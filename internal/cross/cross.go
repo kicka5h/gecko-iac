@@ -16,8 +16,8 @@ const (
 // ImportedResource is a normalized resource extracted from a foreign state file.
 type ImportedResource struct {
 	SourceKind SourceKind
-	SourceType string                 // original type, e.g. "kubernetes_deployment"
-	GeckoType  string                 // mapped gecko type, e.g. "k8s:deployment"; empty if unmapped
+	SourceType string                 // original type, e.g. "proxmox_vm_qemu"
+	GeckoType  string                 // mapped gecko type, e.g. "proxmox:vm"; empty if unmapped
 	Name       string                 // sanitized resource name
 	ExternalID string                 // provider-side ID
 	Inputs     map[string]interface{} // normalized input fields

@@ -1,0 +1,52 @@
+territory "openstack-lab"
+  workspace: "dev"
+end
+
+store "local"
+end
+
+habitat "openstack"
+  auth_url:    env("OS_AUTH_URL")
+  username:    env("OS_USERNAME")
+  password:    secret("openstack.password")
+  tenant_name: env("OS_TENANT_NAME") | "admin"
+  region:      env("OS_REGION_NAME") | "RegionOne"
+  domain_name: env("OS_DOMAIN_NAME") | "Default"
+end
+
+mark net_cidr string: "10.0.1.0/24"
+
+spawn "openstack:network" as "app-net"
+  name: "app-network"
+end
+
+spawn "openstack:subnet" as "app-subnet"
+  needs:      @app-net
+  name:       "app-subnet"
+  network_id: @app-net.id
+  cidr:       net_cidr
+end
+
+spawn "openstack:security_group" as "web-sg"
+  name:        "web-security-group"
+  description: "Allow HTTP and SSH"
+end
+
+spawn "openstack:volume" as "data-vol"
+  name: "data-volume"
+  size: 50
+end
+
+spawn "openstack:instance" as "web-01"
+  needs:     @app-subnet, @web-sg, @data-vol
+  name:      "web-01"
+  flavor:    "m1.medium"
+  image:     "ubuntu-22.04"
+  network:   @app-net.id
+  security_groups: ["web-security-group"]
+end
+
+signal "web_ip"
+  value:       @web-01.ipv4
+  description: "Public IP of web server"
+end
