@@ -54,7 +54,53 @@ type VMInfo struct {
 	Status string
 	Memory int
 	Cores  int
-	Net0   string
+
+	// CPU & compute
+	Sockets  int
+	CPU      string // cpu type/model
+	Balloon  int
+	Numa     bool
+	Vcpus    int
+
+	// Boot & firmware
+	Boot    string
+	OnBoot  bool
+	OSType  string
+	Machine string
+	Bios    string
+
+	// Display & devices
+	VGA     string
+	Agent   string
+	Serial0 string
+	SCSIHW  string
+
+	// Metadata
+	Tags        string
+	Protection  bool
+	Description string
+
+	// Disks
+	SCSI0 string
+	SCSI1 string
+	SCSI2 string
+	SCSI3 string
+	IDE2  string
+
+	// Network
+	Net0 string
+	Net1 string
+	Net2 string
+	Net3 string
+
+	// Cloud-init
+	CIUser       string
+	CIPassword   string
+	IPConfig0    string
+	SSHKeys      string
+	Nameserver   string
+	Searchdomain string
+	CICustom     string
 }
 
 // LXCInfo holds the fields gecko cares about for a Proxmox LXC container.
@@ -64,6 +110,40 @@ type LXCInfo struct {
 	Status   string
 	Memory   int
 	Cores    int
+
+	// Resources
+	Swap     int
+	CPULimit float64
+	CPUUnits int
+
+	// Config
+	Storage      string
+	OnBoot       bool
+	Protection   bool
+	Unprivileged bool
+	Description  string
+	Tags         string
+	Features     string
+
+	// DNS
+	Nameserver   string
+	Searchdomain string
+
+	// SSH
+	SSHPublicKeys string
+
+	// Mount points
+	RootFS string
+	MP0    string
+	MP1    string
+	MP2    string
+	MP3    string
+
+	// Network
+	Net0 string
+	Net1 string
+	Net2 string
+	Net3 string
 }
 
 // StorageInfo holds the fields gecko cares about for a Proxmox cluster storage.
@@ -71,6 +151,14 @@ type StorageInfo struct {
 	Name    string
 	Type    string
 	Content string
+
+	Shared       bool
+	Disable      bool
+	PruneBackups string
+	Pool         string
+	MonHost      string
+	Username     string
+	IsMountpoint bool
 }
 
 // NetworkConfig holds the fields for a Proxmox node network interface.
@@ -82,6 +170,16 @@ type NetworkConfig struct {
 	BridgePorts string
 	Comments    string
 	Autostart   bool
+
+	VlanID          int
+	MTU             int
+	BridgeVlanAware bool
+	BondMode        string
+	BondPrimary     string
+	Address         string
+	Netmask         string
+	Address6        string
+	Gateway6        string
 }
 
 // ── ProxmoxProvider ───────────────────────────────────────────────────────────
@@ -283,24 +381,44 @@ func (p *ProxmoxProvider) Diff(ctx context.Context, current *core.ResourceState,
 	var changes []core.FieldChange
 	switch desired.Type {
 	case "proxmox:vm":
-		changes = append(changes, compareField("name", current.Inputs, desired.Inputs)...)
-		changes = append(changes, compareField("memory", current.Inputs, desired.Inputs)...)
-		changes = append(changes, compareField("cores", current.Inputs, desired.Inputs)...)
-		changes = append(changes, compareField("net0", current.Inputs, desired.Inputs)...)
+		for _, f := range []string{
+			"name", "memory", "cores", "sockets", "cpu", "balloon", "numa", "vcpus",
+			"boot", "onboot", "ostype", "machine", "bios",
+			"vga", "agent", "serial0", "scsihw",
+			"tags", "protection", "description",
+			"scsi0", "scsi1", "scsi2", "scsi3", "ide2",
+			"net0", "net1", "net2", "net3",
+			"ciuser", "ipconfig0", "sshkeys", "nameserver", "searchdomain", "cicustom",
+		} {
+			changes = append(changes, compareField(f, current.Inputs, desired.Inputs)...)
+		}
 	case "proxmox:lxc":
-		changes = append(changes, compareField("hostname", current.Inputs, desired.Inputs)...)
-		changes = append(changes, compareField("memory", current.Inputs, desired.Inputs)...)
-		changes = append(changes, compareField("cores", current.Inputs, desired.Inputs)...)
-		changes = append(changes, compareField("net0", current.Inputs, desired.Inputs)...)
+		for _, f := range []string{
+			"hostname", "memory", "cores", "swap", "cpuunits",
+			"onboot", "protection", "unprivileged",
+			"description", "tags", "features",
+			"nameserver", "searchdomain", "ssh_public_keys", "storage",
+			"rootfs", "mp0", "mp1", "mp2", "mp3",
+			"net0", "net1", "net2", "net3",
+		} {
+			changes = append(changes, compareField(f, current.Inputs, desired.Inputs)...)
+		}
 	case "proxmox:storage":
-		changes = append(changes, compareField("content", current.Inputs, desired.Inputs)...)
-		changes = append(changes, compareField("nodes", current.Inputs, desired.Inputs)...)
+		for _, f := range []string{
+			"content", "nodes", "shared", "disable", "prune_backups",
+			"pool", "monhost", "username", "is_mountpoint",
+		} {
+			changes = append(changes, compareField(f, current.Inputs, desired.Inputs)...)
+		}
 	case "proxmox:network":
-		changes = append(changes, compareField("cidr", current.Inputs, desired.Inputs)...)
-		changes = append(changes, compareField("gateway", current.Inputs, desired.Inputs)...)
-		changes = append(changes, compareField("bridge_ports", current.Inputs, desired.Inputs)...)
-		changes = append(changes, compareField("autostart", current.Inputs, desired.Inputs)...)
-		changes = append(changes, compareField("comments", current.Inputs, desired.Inputs)...)
+		for _, f := range []string{
+			"cidr", "gateway", "bridge_ports", "autostart", "comments",
+			"vlan_id", "mtu", "bridge_vlan_aware",
+			"bond_mode", "bond_primary",
+			"address", "netmask", "address6", "gateway6",
+		} {
+			changes = append(changes, compareField(f, current.Inputs, desired.Inputs)...)
+		}
 	}
 
 	kind := core.ChangeNoOp
@@ -366,21 +484,59 @@ func (p *ProxmoxProvider) readVM(ctx context.Context, id core.ResourceID, extern
 		status = core.StatusPending
 	}
 
+	inputs := core.Inputs{
+		"vmid":   info.VMID,
+		"name":   info.Name,
+		"memory": info.Memory,
+		"cores":  info.Cores,
+	}
+	// Only set non-zero/non-empty fields to keep state clean.
+	setIfNonZero := func(k string, v int) { if v != 0 { inputs[k] = v } }
+	setIfTrue := func(k string, v bool) { if v { inputs[k] = v } }
+	setIfNonEmpty := func(k, v string) { if v != "" { inputs[k] = v } }
+
+	setIfNonZero("sockets", info.Sockets)
+	setIfNonEmpty("cpu", info.CPU)
+	setIfNonZero("balloon", info.Balloon)
+	setIfTrue("numa", info.Numa)
+	setIfNonZero("vcpus", info.Vcpus)
+	setIfNonEmpty("boot", info.Boot)
+	setIfTrue("onboot", info.OnBoot)
+	setIfNonEmpty("ostype", info.OSType)
+	setIfNonEmpty("machine", info.Machine)
+	setIfNonEmpty("bios", info.Bios)
+	setIfNonEmpty("vga", info.VGA)
+	setIfNonEmpty("agent", info.Agent)
+	setIfNonEmpty("serial0", info.Serial0)
+	setIfNonEmpty("scsihw", info.SCSIHW)
+	setIfNonEmpty("tags", info.Tags)
+	setIfTrue("protection", info.Protection)
+	setIfNonEmpty("description", info.Description)
+	setIfNonEmpty("scsi0", info.SCSI0)
+	setIfNonEmpty("scsi1", info.SCSI1)
+	setIfNonEmpty("scsi2", info.SCSI2)
+	setIfNonEmpty("scsi3", info.SCSI3)
+	setIfNonEmpty("ide2", info.IDE2)
+	setIfNonEmpty("net0", info.Net0)
+	setIfNonEmpty("net1", info.Net1)
+	setIfNonEmpty("net2", info.Net2)
+	setIfNonEmpty("net3", info.Net3)
+	setIfNonEmpty("ciuser", info.CIUser)
+	setIfNonEmpty("ipconfig0", info.IPConfig0)
+	setIfNonEmpty("sshkeys", info.SSHKeys)
+	setIfNonEmpty("nameserver", info.Nameserver)
+	setIfNonEmpty("searchdomain", info.Searchdomain)
+	setIfNonEmpty("cicustom", info.CICustom)
+
 	return &core.ResourceState{
 		ID:         id,
 		Type:       "proxmox:vm",
 		ExternalID: externalID,
 		ProviderID: "proxmox",
 		Status:     status,
-		Inputs: core.Inputs{
-			"vmid":   info.VMID,
-			"name":   info.Name,
-			"memory": info.Memory,
-			"cores":  info.Cores,
-			"net0":   info.Net0,
-		},
-		Outputs:   core.Outputs{"vmid": vmid},
-		UpdatedAt: time.Now(),
+		Inputs:     inputs,
+		Outputs:    core.Outputs{"vmid": vmid},
+		UpdatedAt:  time.Now(),
 	}, nil
 }
 
@@ -429,6 +585,7 @@ func vmOptionsFromInputs(inputs core.Inputs, name string) []proxmox.VirtualMachi
 	vmName := getStringInputFallback(inputs, "name", name)
 	opts = append(opts, proxmox.VirtualMachineOption{Name: "name", Value: vmName})
 
+	// CPU & compute
 	if v, ok := toInt(inputs["memory"]); ok {
 		opts = append(opts, proxmox.VirtualMachineOption{Name: "memory", Value: strconv.Itoa(v)})
 	}
@@ -438,16 +595,108 @@ func vmOptionsFromInputs(inputs core.Inputs, name string) []proxmox.VirtualMachi
 	if v, ok := toInt(inputs["sockets"]); ok {
 		opts = append(opts, proxmox.VirtualMachineOption{Name: "sockets", Value: strconv.Itoa(v)})
 	}
+	if v, ok := inputs["cpu"].(string); ok && v != "" {
+		opts = append(opts, proxmox.VirtualMachineOption{Name: "cpu", Value: v})
+	}
+	if v, ok := toInt(inputs["balloon"]); ok {
+		opts = append(opts, proxmox.VirtualMachineOption{Name: "balloon", Value: strconv.Itoa(v)})
+	}
+	if v, ok := inputs["numa"].(bool); ok && v {
+		opts = append(opts, proxmox.VirtualMachineOption{Name: "numa", Value: "1"})
+	}
+	if v, ok := toInt(inputs["vcpus"]); ok {
+		opts = append(opts, proxmox.VirtualMachineOption{Name: "vcpus", Value: strconv.Itoa(v)})
+	}
+
+	// Boot & firmware
+	if v, ok := inputs["boot"].(string); ok && v != "" {
+		opts = append(opts, proxmox.VirtualMachineOption{Name: "boot", Value: v})
+	}
+	if v, ok := inputs["onboot"].(bool); ok && v {
+		opts = append(opts, proxmox.VirtualMachineOption{Name: "onboot", Value: "1"})
+	}
+	if v, ok := inputs["ostype"].(string); ok && v != "" {
+		opts = append(opts, proxmox.VirtualMachineOption{Name: "ostype", Value: v})
+	}
+	if v, ok := inputs["machine"].(string); ok && v != "" {
+		opts = append(opts, proxmox.VirtualMachineOption{Name: "machine", Value: v})
+	}
+	if v, ok := inputs["bios"].(string); ok && v != "" {
+		opts = append(opts, proxmox.VirtualMachineOption{Name: "bios", Value: v})
+	}
+
+	// Display & devices
+	if v, ok := inputs["vga"].(string); ok && v != "" {
+		opts = append(opts, proxmox.VirtualMachineOption{Name: "vga", Value: v})
+	}
+	if v, ok := inputs["agent"].(string); ok && v != "" {
+		opts = append(opts, proxmox.VirtualMachineOption{Name: "agent", Value: v})
+	}
+	if v, ok := inputs["serial0"].(string); ok && v != "" {
+		opts = append(opts, proxmox.VirtualMachineOption{Name: "serial0", Value: v})
+	}
+	if v, ok := inputs["scsihw"].(string); ok && v != "" {
+		opts = append(opts, proxmox.VirtualMachineOption{Name: "scsihw", Value: v})
+	}
+
+	// Metadata
+	if v, ok := inputs["tags"].(string); ok && v != "" {
+		opts = append(opts, proxmox.VirtualMachineOption{Name: "tags", Value: v})
+	}
+	if v, ok := inputs["protection"].(bool); ok && v {
+		opts = append(opts, proxmox.VirtualMachineOption{Name: "protection", Value: "1"})
+	}
+	if v, ok := inputs["description"].(string); ok && v != "" {
+		opts = append(opts, proxmox.VirtualMachineOption{Name: "description", Value: v})
+	}
+
+	// Disks
 	if v, ok := inputs["iso"].(string); ok && v != "" {
 		opts = append(opts, proxmox.VirtualMachineOption{Name: "cdrom", Value: v})
 	}
-	if v, ok := inputs["net0"].(string); ok && v != "" {
-		opts = append(opts, proxmox.VirtualMachineOption{Name: "net0", Value: v})
+	if v, ok := inputs["ide2"].(string); ok && v != "" {
+		opts = append(opts, proxmox.VirtualMachineOption{Name: "ide2", Value: v})
 	}
 	if v, ok := inputs["disk_size"].(string); ok && v != "" {
 		storage := getStringInputFallback(inputs, "storage", "local-lvm")
+		scsihw := getStringInputFallback(inputs, "scsihw", "virtio-scsi-pci")
 		opts = append(opts, proxmox.VirtualMachineOption{Name: "scsi0", Value: storage + ":" + v})
-		opts = append(opts, proxmox.VirtualMachineOption{Name: "scsihw", Value: "virtio-scsi-pci"})
+		opts = append(opts, proxmox.VirtualMachineOption{Name: "scsihw", Value: scsihw})
+	}
+	for _, disk := range []string{"scsi1", "scsi2", "scsi3"} {
+		if v, ok := inputs[disk].(string); ok && v != "" {
+			opts = append(opts, proxmox.VirtualMachineOption{Name: disk, Value: v})
+		}
+	}
+
+	// Network
+	for _, nic := range []string{"net0", "net1", "net2", "net3"} {
+		if v, ok := inputs[nic].(string); ok && v != "" {
+			opts = append(opts, proxmox.VirtualMachineOption{Name: nic, Value: v})
+		}
+	}
+
+	// Cloud-init
+	if v, ok := inputs["ciuser"].(string); ok && v != "" {
+		opts = append(opts, proxmox.VirtualMachineOption{Name: "ciuser", Value: v})
+	}
+	if v, ok := inputs["cipassword"].(string); ok && v != "" {
+		opts = append(opts, proxmox.VirtualMachineOption{Name: "cipassword", Value: v})
+	}
+	if v, ok := inputs["ipconfig0"].(string); ok && v != "" {
+		opts = append(opts, proxmox.VirtualMachineOption{Name: "ipconfig0", Value: v})
+	}
+	if v, ok := inputs["sshkeys"].(string); ok && v != "" {
+		opts = append(opts, proxmox.VirtualMachineOption{Name: "sshkeys", Value: v})
+	}
+	if v, ok := inputs["nameserver"].(string); ok && v != "" {
+		opts = append(opts, proxmox.VirtualMachineOption{Name: "nameserver", Value: v})
+	}
+	if v, ok := inputs["searchdomain"].(string); ok && v != "" {
+		opts = append(opts, proxmox.VirtualMachineOption{Name: "searchdomain", Value: v})
+	}
+	if v, ok := inputs["cicustom"].(string); ok && v != "" {
+		opts = append(opts, proxmox.VirtualMachineOption{Name: "cicustom", Value: v})
 	}
 
 	return opts
@@ -511,20 +760,47 @@ func (p *ProxmoxProvider) readLXC(ctx context.Context, id core.ResourceID, exter
 		status = core.StatusPending
 	}
 
+	inputs := core.Inputs{
+		"vmid":     info.VMID,
+		"hostname": info.Hostname,
+		"memory":   info.Memory,
+		"cores":    info.Cores,
+	}
+	setIfNonZero := func(k string, v int) { if v != 0 { inputs[k] = v } }
+	setIfTrue := func(k string, v bool) { if v { inputs[k] = v } }
+	setIfNonEmpty := func(k, v string) { if v != "" { inputs[k] = v } }
+
+	setIfNonZero("swap", info.Swap)
+	setIfNonZero("cpuunits", info.CPUUnits)
+	setIfTrue("onboot", info.OnBoot)
+	setIfTrue("protection", info.Protection)
+	setIfTrue("unprivileged", info.Unprivileged)
+	setIfNonEmpty("description", info.Description)
+	setIfNonEmpty("tags", info.Tags)
+	setIfNonEmpty("features", info.Features)
+	setIfNonEmpty("nameserver", info.Nameserver)
+	setIfNonEmpty("searchdomain", info.Searchdomain)
+	setIfNonEmpty("ssh_public_keys", info.SSHPublicKeys)
+	setIfNonEmpty("storage", info.Storage)
+	setIfNonEmpty("rootfs", info.RootFS)
+	setIfNonEmpty("mp0", info.MP0)
+	setIfNonEmpty("mp1", info.MP1)
+	setIfNonEmpty("mp2", info.MP2)
+	setIfNonEmpty("mp3", info.MP3)
+	setIfNonEmpty("net0", info.Net0)
+	setIfNonEmpty("net1", info.Net1)
+	setIfNonEmpty("net2", info.Net2)
+	setIfNonEmpty("net3", info.Net3)
+
 	return &core.ResourceState{
 		ID:         id,
 		Type:       "proxmox:lxc",
 		ExternalID: externalID,
 		ProviderID: "proxmox",
 		Status:     status,
-		Inputs: core.Inputs{
-			"vmid":     info.VMID,
-			"hostname": info.Hostname,
-			"memory":   info.Memory,
-			"cores":    info.Cores,
-		},
-		Outputs:   core.Outputs{"vmid": vmid},
-		UpdatedAt: time.Now(),
+		Inputs:     inputs,
+		Outputs:    core.Outputs{"vmid": vmid},
+		UpdatedAt:  time.Now(),
 	}, nil
 }
 
@@ -581,14 +857,45 @@ func lxcOptionsFromInputs(inputs core.Inputs, name string) []proxmox.ContainerOp
 	if v, ok := toInt(inputs["cores"]); ok {
 		opts = append(opts, proxmox.ContainerOption{Name: "cores", Value: strconv.Itoa(v)})
 	}
+	if v, ok := toInt(inputs["swap"]); ok {
+		opts = append(opts, proxmox.ContainerOption{Name: "swap", Value: strconv.Itoa(v)})
+	}
+	if v, ok := toInt(inputs["cpuunits"]); ok {
+		opts = append(opts, proxmox.ContainerOption{Name: "cpuunits", Value: strconv.Itoa(v)})
+	}
 	if v, ok := inputs["rootfs"].(string); ok && v != "" {
 		opts = append(opts, proxmox.ContainerOption{Name: "rootfs", Value: v})
 	}
-	if v, ok := inputs["net0"].(string); ok && v != "" {
-		opts = append(opts, proxmox.ContainerOption{Name: "net0", Value: v})
-	}
 	if v, ok := inputs["password"].(string); ok && v != "" {
 		opts = append(opts, proxmox.ContainerOption{Name: "password", Value: v})
+	}
+	if v, ok := inputs["onboot"].(bool); ok && v {
+		opts = append(opts, proxmox.ContainerOption{Name: "onboot", Value: "1"})
+	}
+	if v, ok := inputs["protection"].(bool); ok && v {
+		opts = append(opts, proxmox.ContainerOption{Name: "protection", Value: "1"})
+	}
+	if v, ok := inputs["unprivileged"].(bool); ok && v {
+		opts = append(opts, proxmox.ContainerOption{Name: "unprivileged", Value: "1"})
+	}
+	for _, s := range []string{"description", "tags", "features", "nameserver", "searchdomain", "ssh_public_keys", "storage"} {
+		if v, ok := inputs[s].(string); ok && v != "" {
+			apiKey := s
+			if s == "ssh_public_keys" {
+				apiKey = "ssh-public-keys"
+			}
+			opts = append(opts, proxmox.ContainerOption{Name: apiKey, Value: v})
+		}
+	}
+	for _, nic := range []string{"net0", "net1", "net2", "net3"} {
+		if v, ok := inputs[nic].(string); ok && v != "" {
+			opts = append(opts, proxmox.ContainerOption{Name: nic, Value: v})
+		}
+	}
+	for _, mp := range []string{"mp0", "mp1", "mp2", "mp3"} {
+		if v, ok := inputs[mp].(string); ok && v != "" {
+			opts = append(opts, proxmox.ContainerOption{Name: mp, Value: v})
+		}
 	}
 
 	return opts
@@ -640,19 +947,31 @@ func (p *ProxmoxProvider) readStorage(ctx context.Context, id core.ResourceID, e
 		return nil, nil
 	}
 
+	inputs := core.Inputs{
+		"storage": info.Name,
+		"type":    info.Type,
+		"content": info.Content,
+	}
+	setIfTrue := func(k string, v bool) { if v { inputs[k] = v } }
+	setIfNonEmpty := func(k, v string) { if v != "" { inputs[k] = v } }
+
+	setIfTrue("shared", info.Shared)
+	setIfTrue("disable", info.Disable)
+	setIfTrue("is_mountpoint", info.IsMountpoint)
+	setIfNonEmpty("prune_backups", info.PruneBackups)
+	setIfNonEmpty("pool", info.Pool)
+	setIfNonEmpty("monhost", info.MonHost)
+	setIfNonEmpty("username", info.Username)
+
 	return &core.ResourceState{
 		ID:         id,
 		Type:       "proxmox:storage",
 		ExternalID: externalID,
 		ProviderID: "proxmox",
 		Status:     core.StatusRunning,
-		Inputs: core.Inputs{
-			"storage": info.Name,
-			"type":    info.Type,
-			"content": info.Content,
-		},
-		Outputs:   core.Outputs{"storage": info.Name},
-		UpdatedAt: time.Now(),
+		Inputs:     inputs,
+		Outputs:    core.Outputs{"storage": info.Name},
+		UpdatedAt:  time.Now(),
 	}, nil
 }
 
@@ -677,23 +996,19 @@ func storageOptionsFromInputs(inputs core.Inputs, name string) []proxmox.Cluster
 
 	opts = append(opts, proxmox.ClusterStorageOptions{Name: "storage", Value: name})
 
-	if v, ok := inputs["type"].(string); ok && v != "" {
-		opts = append(opts, proxmox.ClusterStorageOptions{Name: "type", Value: v})
+	for _, s := range []string{"type", "content", "path", "server", "export", "nodes", "prune_backups", "pool", "monhost", "username"} {
+		if v, ok := inputs[s].(string); ok && v != "" {
+			opts = append(opts, proxmox.ClusterStorageOptions{Name: s, Value: v})
+		}
 	}
-	if v, ok := inputs["content"].(string); ok && v != "" {
-		opts = append(opts, proxmox.ClusterStorageOptions{Name: "content", Value: v})
+	if v, ok := inputs["shared"].(bool); ok && v {
+		opts = append(opts, proxmox.ClusterStorageOptions{Name: "shared", Value: "1"})
 	}
-	if v, ok := inputs["path"].(string); ok && v != "" {
-		opts = append(opts, proxmox.ClusterStorageOptions{Name: "path", Value: v})
+	if v, ok := inputs["disable"].(bool); ok && v {
+		opts = append(opts, proxmox.ClusterStorageOptions{Name: "disable", Value: "1"})
 	}
-	if v, ok := inputs["server"].(string); ok && v != "" {
-		opts = append(opts, proxmox.ClusterStorageOptions{Name: "server", Value: v})
-	}
-	if v, ok := inputs["export"].(string); ok && v != "" {
-		opts = append(opts, proxmox.ClusterStorageOptions{Name: "export", Value: v})
-	}
-	if v, ok := inputs["nodes"].(string); ok && v != "" {
-		opts = append(opts, proxmox.ClusterStorageOptions{Name: "nodes", Value: v})
+	if v, ok := inputs["is_mountpoint"].(bool); ok && v {
+		opts = append(opts, proxmox.ClusterStorageOptions{Name: "is_mountpoint", Value: "1"})
 	}
 
 	return opts
@@ -742,23 +1057,38 @@ func (p *ProxmoxProvider) readNetwork(ctx context.Context, id core.ResourceID, e
 	}
 
 	nodeName, _, _ := splitNetworkID(externalID)
+	inputs := core.Inputs{
+		"iface":        cfg.Iface,
+		"type":         cfg.Type,
+		"cidr":         cfg.CIDR,
+		"gateway":      cfg.Gateway,
+		"bridge_ports": cfg.BridgePorts,
+		"comments":     cfg.Comments,
+		"autostart":    cfg.Autostart,
+	}
+	setIfNonZero := func(k string, v int) { if v != 0 { inputs[k] = v } }
+	setIfTrue := func(k string, v bool) { if v { inputs[k] = v } }
+	setIfNonEmpty := func(k, v string) { if v != "" { inputs[k] = v } }
+
+	setIfNonZero("vlan_id", cfg.VlanID)
+	setIfNonZero("mtu", cfg.MTU)
+	setIfTrue("bridge_vlan_aware", cfg.BridgeVlanAware)
+	setIfNonEmpty("bond_mode", cfg.BondMode)
+	setIfNonEmpty("bond_primary", cfg.BondPrimary)
+	setIfNonEmpty("address", cfg.Address)
+	setIfNonEmpty("netmask", cfg.Netmask)
+	setIfNonEmpty("address6", cfg.Address6)
+	setIfNonEmpty("gateway6", cfg.Gateway6)
+
 	return &core.ResourceState{
 		ID:         id,
 		Type:       "proxmox:network",
 		ExternalID: externalID,
 		ProviderID: "proxmox",
 		Status:     core.StatusRunning,
-		Inputs: core.Inputs{
-			"iface":        cfg.Iface,
-			"type":         cfg.Type,
-			"cidr":         cfg.CIDR,
-			"gateway":      cfg.Gateway,
-			"bridge_ports": cfg.BridgePorts,
-			"comments":     cfg.Comments,
-			"autostart":    cfg.Autostart,
-		},
-		Outputs:   core.Outputs{"iface": cfg.Iface, "node": nodeName},
-		UpdatedAt: time.Now(),
+		Inputs:     inputs,
+		Outputs:    core.Outputs{"iface": cfg.Iface, "node": nodeName},
+		UpdatedAt:  time.Now(),
 	}, nil
 }
 
@@ -793,14 +1123,27 @@ func (p *ProxmoxProvider) deleteNetwork(ctx context.Context, state *core.Resourc
 
 // networkCfgFromInputs builds a NetworkConfig from Scute inputs.
 func networkCfgFromInputs(inputs core.Inputs, name string) NetworkConfig {
+	getString := func(k string) string { v, _ := inputs[k].(string); return v }
+	getBool := func(k string) bool { v, _ := inputs[k].(bool); return v }
+	getInt := func(k string) int { v, _ := toInt(inputs[k]); return v }
+
 	return NetworkConfig{
-		Iface:       getStringInputFallback(inputs, "iface", name),
-		Type:        getStringInputFallback(inputs, "type", "bridge"),
-		CIDR:        func() string { v, _ := inputs["cidr"].(string); return v }(),
-		Gateway:     func() string { v, _ := inputs["gateway"].(string); return v }(),
-		BridgePorts: func() string { v, _ := inputs["bridge_ports"].(string); return v }(),
-		Comments:    func() string { v, _ := inputs["comments"].(string); return v }(),
-		Autostart:   func() bool { v, _ := inputs["autostart"].(bool); return v }(),
+		Iface:           getStringInputFallback(inputs, "iface", name),
+		Type:            getStringInputFallback(inputs, "type", "bridge"),
+		CIDR:            getString("cidr"),
+		Gateway:         getString("gateway"),
+		BridgePorts:     getString("bridge_ports"),
+		Comments:        getString("comments"),
+		Autostart:       getBool("autostart"),
+		VlanID:          getInt("vlan_id"),
+		MTU:             getInt("mtu"),
+		BridgeVlanAware: getBool("bridge_vlan_aware"),
+		BondMode:        getString("bond_mode"),
+		BondPrimary:     getString("bond_primary"),
+		Address:         getString("address"),
+		Netmask:         getString("netmask"),
+		Address6:        getString("address6"),
+		Gateway6:        getString("gateway6"),
 	}
 }
 

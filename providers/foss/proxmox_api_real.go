@@ -82,11 +82,44 @@ func (r *realProxmoxAPI) ReadVM(ctx context.Context, vmid int) (*VMInfo, error) 
 		Name:   vm.Name,
 		Status: vm.Status,
 	}
-	if vm.VirtualMachineConfig != nil {
-		cfg := vm.VirtualMachineConfig
+	if cfg := vm.VirtualMachineConfig; cfg != nil {
 		info.Cores = cfg.Cores
+		info.Memory = int(cfg.Memory)
+		info.Sockets = cfg.Sockets
+		info.CPU = cfg.CPU
+		info.Balloon = cfg.Balloon
+		info.Numa = cfg.Numa != 0
+		info.Vcpus = cfg.Vcpus
+		info.Boot = cfg.Boot
+		info.OnBoot = cfg.OnBoot != 0
+		info.OSType = cfg.OSType
+		info.Machine = cfg.Machine
+		info.Bios = cfg.Bios
+		info.VGA = cfg.VGA
+		info.Agent = cfg.Agent
+		info.Serial0 = cfg.Serial0
+		info.SCSIHW = cfg.SCSIHW
+		info.Tags = cfg.Tags
+		info.Protection = cfg.Protection != 0
+		info.Description = cfg.Description
+		info.SCSI0 = cfg.SCSI0
+		info.SCSI1 = cfg.SCSI1
+		info.SCSI2 = cfg.SCSI2
+		info.SCSI3 = cfg.SCSI3
+		info.IDE2 = cfg.IDE2
+		info.CIUser = cfg.CIUser
+		info.CIPassword = cfg.CIPassword
+		info.IPConfig0 = cfg.IPConfig0
+		info.SSHKeys = cfg.SSHKeys
+		info.Nameserver = cfg.Nameserver
+		info.Searchdomain = cfg.Searchdomain
+		info.CICustom = cfg.CICustom
+
 		if nets := cfg.MergeNets(); nets != nil {
 			info.Net0 = nets["net0"]
+			info.Net1 = nets["net1"]
+			info.Net2 = nets["net2"]
+			info.Net3 = nets["net3"]
 		}
 	}
 	return info, nil
