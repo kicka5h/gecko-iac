@@ -43,6 +43,76 @@ type proxmoxAPI interface {
 	UpdateNetwork(ctx context.Context, iface string, cfg NetworkConfig) error
 	DeleteNetwork(ctx context.Context, iface string) error
 	ReloadNetwork(ctx context.Context) error
+
+	CreateFirewallRule(ctx context.Context, scope string, rule FirewallRuleInfo) (int, error)
+	ReadFirewallRule(ctx context.Context, scope string, pos int) (*FirewallRuleInfo, error)
+	UpdateFirewallRule(ctx context.Context, scope string, pos int, rule FirewallRuleInfo) error
+	DeleteFirewallRule(ctx context.Context, scope string, pos int) error
+
+	CreateSnapshot(ctx context.Context, vmid int, name, description string, vmstate bool) error
+	ReadSnapshot(ctx context.Context, vmid int, name string) (*SnapshotInfo, error)
+	DeleteSnapshot(ctx context.Context, vmid int, name string) error
+
+	CreatePool(ctx context.Context, poolid, comment string) error
+	ReadPool(ctx context.Context, poolid string) (*PoolInfo, error)
+	UpdatePool(ctx context.Context, poolid, comment string) error
+	DeletePool(ctx context.Context, poolid string) error
+
+	CreateBackupJob(ctx context.Context, job BackupJobInfo) (string, error)
+	ReadBackupJob(ctx context.Context, id string) (*BackupJobInfo, error)
+	UpdateBackupJob(ctx context.Context, id string, job BackupJobInfo) error
+	DeleteBackupJob(ctx context.Context, id string) error
+
+	// SDN
+	CreateSDNZone(ctx context.Context, zone SDNZoneInfo) error
+	ReadSDNZone(ctx context.Context, zone string) (*SDNZoneInfo, error)
+	UpdateSDNZone(ctx context.Context, zone string, info SDNZoneInfo) error
+	DeleteSDNZone(ctx context.Context, zone string) error
+
+	CreateSDNVnet(ctx context.Context, vnet SDNVnetInfo) error
+	ReadSDNVnet(ctx context.Context, vnet string) (*SDNVnetInfo, error)
+	UpdateSDNVnet(ctx context.Context, vnet string, info SDNVnetInfo) error
+	DeleteSDNVnet(ctx context.Context, vnet string) error
+
+	CreateSDNSubnet(ctx context.Context, vnet string, subnet SDNSubnetInfo) error
+	ReadSDNSubnet(ctx context.Context, vnet, subnet string) (*SDNSubnetInfo, error)
+	UpdateSDNSubnet(ctx context.Context, vnet, subnet string, info SDNSubnetInfo) error
+	DeleteSDNSubnet(ctx context.Context, vnet, subnet string) error
+
+	// HA
+	CreateHAGroup(ctx context.Context, group HAGroupInfo) error
+	ReadHAGroup(ctx context.Context, group string) (*HAGroupInfo, error)
+	UpdateHAGroup(ctx context.Context, group string, info HAGroupInfo) error
+	DeleteHAGroup(ctx context.Context, group string) error
+
+	CreateHAResource(ctx context.Context, res HAResourceInfo) error
+	ReadHAResource(ctx context.Context, sid string) (*HAResourceInfo, error)
+	UpdateHAResource(ctx context.Context, sid string, info HAResourceInfo) error
+	DeleteHAResource(ctx context.Context, sid string) error
+
+	// ACME
+	CreateACMEAccount(ctx context.Context, acct ACMEAccountInfo) error
+	ReadACMEAccount(ctx context.Context, name string) (*ACMEAccountInfo, error)
+	DeleteACMEAccount(ctx context.Context, name string) error
+
+	// Users/Roles/ACLs
+	CreateUser(ctx context.Context, user PVEUserInfo) error
+	ReadUser(ctx context.Context, userid string) (*PVEUserInfo, error)
+	UpdateUser(ctx context.Context, userid string, user PVEUserInfo) error
+	DeleteUser(ctx context.Context, userid string) error
+
+	CreateRole(ctx context.Context, role PVERoleInfo) error
+	ReadRole(ctx context.Context, roleid string) (*PVERoleInfo, error)
+	UpdateRole(ctx context.Context, roleid string, role PVERoleInfo) error
+	DeleteRole(ctx context.Context, roleid string) error
+
+	SetACL(ctx context.Context, acl PVEACLInfo) error
+	ReadACL(ctx context.Context, path string) (*PVEACLInfo, error)
+	DeleteACL(ctx context.Context, path string) error
+
+	// Cluster
+	ReadClusterOptions(ctx context.Context) (*ClusterOptionsInfo, error)
+	UpdateClusterOptions(ctx context.Context, opts ClusterOptionsInfo) error
 }
 
 // ── Value types returned by the interface (no library type leakage) ────────────
@@ -182,6 +252,142 @@ type NetworkConfig struct {
 	Gateway6        string
 }
 
+// FirewallRuleInfo holds a single Proxmox firewall rule.
+type FirewallRuleInfo struct {
+	Pos     int
+	Type    string // "in" or "out"
+	Action  string // ACCEPT, DROP, REJECT
+	Source  string
+	Dest    string
+	Proto   string
+	DPort   string
+	SPort   string
+	Enable  bool
+	Comment string
+	Log     string
+	Macro   string
+	Iface   string
+}
+
+// SnapshotInfo holds a VM/CT snapshot.
+type SnapshotInfo struct {
+	Name        string
+	Description string
+	VMState     bool
+}
+
+// PoolInfo holds a Proxmox resource pool.
+type PoolInfo struct {
+	PoolID  string
+	Comment string
+}
+
+// BackupJobInfo holds a Proxmox backup job configuration.
+type BackupJobInfo struct {
+	ID           string
+	VMID         string // VM/CT ID or "all"
+	Storage      string
+	Mode         string // snapshot, suspend, stop
+	Compress     string // zstd, lzo, gzip, 0
+	Mailto       string
+	Schedule     string
+	Enabled      bool
+	PruneBackups string
+}
+
+// SDNZoneInfo holds a Proxmox SDN zone.
+type SDNZoneInfo struct {
+	Zone       string
+	Type       string // simple, vlan, qinq, vxlan, evpn
+	Bridge     string
+	MTU        int
+	Nodes      string
+	DNS        string
+	ReverseDNS string
+	DNSZone    string
+	IPAM       string
+}
+
+// SDNVnetInfo holds a Proxmox SDN virtual network.
+type SDNVnetInfo struct {
+	Vnet      string
+	Zone      string
+	Tag       int
+	Alias     string
+	VlanAware bool
+}
+
+// SDNSubnetInfo holds a Proxmox SDN subnet.
+type SDNSubnetInfo struct {
+	Subnet        string // CIDR
+	Vnet          string
+	Gateway       string
+	SNAT          bool
+	DNSZonePrefix string
+}
+
+// HAGroupInfo holds a Proxmox HA group.
+type HAGroupInfo struct {
+	Group      string
+	Nodes      string // e.g. "node1:2,node2:1"
+	Restricted bool
+	NoFailback bool
+	Comment    string
+}
+
+// HAResourceInfo holds a Proxmox HA resource.
+type HAResourceInfo struct {
+	SID          string // e.g. "vm:100", "ct:101"
+	Group        string
+	MaxRelocate  int
+	MaxRestart   int
+	State        string // started, stopped, disabled
+	Comment      string
+}
+
+// ACMEAccountInfo holds a Proxmox ACME account.
+type ACMEAccountInfo struct {
+	Name      string
+	Contact   string
+	Directory string
+}
+
+// PVEUserInfo holds a Proxmox user.
+type PVEUserInfo struct {
+	UserID    string // e.g. "user@pam"
+	Email     string
+	FirstName string
+	LastName  string
+	Groups    string
+	Enable    bool
+	Expire    int
+	Comment   string
+}
+
+// PVERoleInfo holds a Proxmox role.
+type PVERoleInfo struct {
+	RoleID string
+	Privs  string
+}
+
+// PVEACLInfo holds a Proxmox ACL entry.
+type PVEACLInfo struct {
+	Path      string
+	Roles     string
+	Users     string
+	Groups    string
+	Propagate bool
+}
+
+// ClusterOptionsInfo holds Proxmox cluster-wide options.
+type ClusterOptionsInfo struct {
+	Keyboard        string
+	Language         string
+	EmailFrom       string
+	MigrationType   string
+	MigrationNetwork string
+}
+
 // ── ProxmoxProvider ───────────────────────────────────────────────────────────
 
 // ProxmoxProvider manages Proxmox VE resources via the PVE REST API.
@@ -228,6 +434,20 @@ func (p *ProxmoxProvider) SupportedTypes() []core.ResourceType {
 		"proxmox:lxc",
 		"proxmox:storage",
 		"proxmox:network",
+		"proxmox:firewall_rule",
+		"proxmox:snapshot",
+		"proxmox:pool",
+		"proxmox:backup",
+		"proxmox:sdn_zone",
+		"proxmox:sdn_vnet",
+		"proxmox:sdn_subnet",
+		"proxmox:ha_group",
+		"proxmox:ha_resource",
+		"proxmox:acme_account",
+		"proxmox:user",
+		"proxmox:role",
+		"proxmox:acl",
+		"proxmox:cluster_options",
 	}
 }
 
@@ -293,6 +513,34 @@ func (p *ProxmoxProvider) Create(ctx context.Context, args core.ResourceArgs) (*
 		return p.createStorage(ctx, args)
 	case "proxmox:network":
 		return p.createNetwork(ctx, args)
+	case "proxmox:firewall_rule":
+		return p.createFirewallRule(ctx, args)
+	case "proxmox:snapshot":
+		return p.createSnapshot(ctx, args)
+	case "proxmox:pool":
+		return p.createPool(ctx, args)
+	case "proxmox:backup":
+		return p.createBackupJob(ctx, args)
+	case "proxmox:sdn_zone":
+		return p.createSDNZone(ctx, args)
+	case "proxmox:sdn_vnet":
+		return p.createSDNVnet(ctx, args)
+	case "proxmox:sdn_subnet":
+		return p.createSDNSubnet(ctx, args)
+	case "proxmox:ha_group":
+		return p.createHAGroup(ctx, args)
+	case "proxmox:ha_resource":
+		return p.createHAResource(ctx, args)
+	case "proxmox:acme_account":
+		return p.createACMEAccount(ctx, args)
+	case "proxmox:user":
+		return p.createUser(ctx, args)
+	case "proxmox:role":
+		return p.createRole(ctx, args)
+	case "proxmox:acl":
+		return p.createACL(ctx, args)
+	case "proxmox:cluster_options":
+		return p.createClusterOptions(ctx, args)
 	default:
 		return nil, fmt.Errorf("proxmox: unsupported resource type %q", args.Type)
 	}
@@ -316,6 +564,34 @@ func (p *ProxmoxProvider) Read(ctx context.Context, id core.ResourceID, external
 		return p.readStorage(ctx, id, externalID)
 	case "proxmox:network":
 		return p.readNetwork(ctx, id, externalID)
+	case "proxmox:firewall_rule":
+		return p.readFirewallRule(ctx, id, externalID)
+	case "proxmox:snapshot":
+		return p.readSnapshot(ctx, id, externalID)
+	case "proxmox:pool":
+		return p.readPool(ctx, id, externalID)
+	case "proxmox:backup":
+		return p.readBackupJob(ctx, id, externalID)
+	case "proxmox:sdn_zone":
+		return p.readSDNZoneRes(ctx, id, externalID)
+	case "proxmox:sdn_vnet":
+		return p.readSDNVnetRes(ctx, id, externalID)
+	case "proxmox:sdn_subnet":
+		return p.readSDNSubnetRes(ctx, id, externalID)
+	case "proxmox:ha_group":
+		return p.readHAGroupRes(ctx, id, externalID)
+	case "proxmox:ha_resource":
+		return p.readHAResourceRes(ctx, id, externalID)
+	case "proxmox:acme_account":
+		return p.readACMEAccountRes(ctx, id, externalID)
+	case "proxmox:user":
+		return p.readUserRes(ctx, id, externalID)
+	case "proxmox:role":
+		return p.readRoleRes(ctx, id, externalID)
+	case "proxmox:acl":
+		return p.readACLRes(ctx, id, externalID)
+	case "proxmox:cluster_options":
+		return p.readClusterOptionsRes(ctx, id, externalID)
 	default:
 		return nil, fmt.Errorf("proxmox: unsupported resource type %q", rType)
 	}
@@ -334,6 +610,32 @@ func (p *ProxmoxProvider) Update(ctx context.Context, current *core.ResourceStat
 		return p.updateStorage(ctx, current, desired)
 	case "proxmox:network":
 		return p.updateNetwork(ctx, current, desired)
+	case "proxmox:firewall_rule":
+		return p.updateFirewallRule(ctx, current, desired)
+	case "proxmox:pool":
+		return p.updatePool(ctx, current, desired)
+	case "proxmox:backup":
+		return p.updateBackupJob(ctx, current, desired)
+	case "proxmox:snapshot":
+		return nil, fmt.Errorf("proxmox: snapshots are immutable — delete and recreate")
+	case "proxmox:sdn_zone":
+		return p.updateSDNZoneRes(ctx, current, desired)
+	case "proxmox:sdn_vnet":
+		return p.updateSDNVnetRes(ctx, current, desired)
+	case "proxmox:sdn_subnet":
+		return p.updateSDNSubnetRes(ctx, current, desired)
+	case "proxmox:ha_group":
+		return p.updateHAGroupRes(ctx, current, desired)
+	case "proxmox:ha_resource":
+		return p.updateHAResourceRes(ctx, current, desired)
+	case "proxmox:user":
+		return p.updateUserRes(ctx, current, desired)
+	case "proxmox:role":
+		return p.updateRoleRes(ctx, current, desired)
+	case "proxmox:cluster_options":
+		return p.updateClusterOptionsRes(ctx, current, desired)
+	case "proxmox:acme_account", "proxmox:acl":
+		return nil, fmt.Errorf("proxmox: %s is immutable — delete and recreate", desired.Type)
 	default:
 		return nil, fmt.Errorf("proxmox: unsupported resource type %q", desired.Type)
 	}
@@ -352,6 +654,38 @@ func (p *ProxmoxProvider) Delete(ctx context.Context, state *core.ResourceState)
 		return p.deleteStorage(ctx, state)
 	case "proxmox:network":
 		return p.deleteNetwork(ctx, state)
+	case "proxmox:firewall_rule":
+		return p.deleteFirewallRule(ctx, state)
+	case "proxmox:snapshot":
+		return p.deleteSnapshot(ctx, state)
+	case "proxmox:pool":
+		return p.deletePool(ctx, state)
+	case "proxmox:backup":
+		return p.deleteBackupJob(ctx, state)
+	case "proxmox:sdn_zone":
+		return p.api.DeleteSDNZone(ctx, state.ExternalID)
+	case "proxmox:sdn_vnet":
+		return p.api.DeleteSDNVnet(ctx, state.ExternalID)
+	case "proxmox:sdn_subnet":
+		parts := strings.SplitN(state.ExternalID, "/", 2)
+		if len(parts) != 2 {
+			return fmt.Errorf("proxmox: invalid sdn_subnet externalID %q", state.ExternalID)
+		}
+		return p.api.DeleteSDNSubnet(ctx, parts[0], parts[1])
+	case "proxmox:ha_group":
+		return p.api.DeleteHAGroup(ctx, state.ExternalID)
+	case "proxmox:ha_resource":
+		return p.api.DeleteHAResource(ctx, state.ExternalID)
+	case "proxmox:acme_account":
+		return p.api.DeleteACMEAccount(ctx, state.ExternalID)
+	case "proxmox:user":
+		return p.api.DeleteUser(ctx, state.ExternalID)
+	case "proxmox:role":
+		return p.api.DeleteRole(ctx, state.ExternalID)
+	case "proxmox:acl":
+		return p.api.DeleteACL(ctx, state.ExternalID)
+	case "proxmox:cluster_options":
+		return nil // cluster options cannot be deleted, only updated
 	default:
 		return fmt.Errorf("proxmox: unsupported resource type %q", state.Type)
 	}
@@ -417,6 +751,64 @@ func (p *ProxmoxProvider) Diff(ctx context.Context, current *core.ResourceState,
 			"bond_mode", "bond_primary",
 			"address", "netmask", "address6", "gateway6",
 		} {
+			changes = append(changes, compareField(f, current.Inputs, desired.Inputs)...)
+		}
+	case "proxmox:firewall_rule":
+		for _, f := range []string{
+			"type", "action", "source", "dest", "proto",
+			"dport", "sport", "enable", "comment", "log", "macro", "iface",
+		} {
+			changes = append(changes, compareField(f, current.Inputs, desired.Inputs)...)
+		}
+	case "proxmox:snapshot":
+		for _, f := range []string{"description", "vmstate"} {
+			changes = append(changes, compareField(f, current.Inputs, desired.Inputs)...)
+		}
+	case "proxmox:pool":
+		changes = append(changes, compareField("comment", current.Inputs, desired.Inputs)...)
+	case "proxmox:backup":
+		for _, f := range []string{
+			"vmid", "storage", "mode", "compress",
+			"mailto", "schedule", "enabled", "prune_backups",
+		} {
+			changes = append(changes, compareField(f, current.Inputs, desired.Inputs)...)
+		}
+	case "proxmox:sdn_zone":
+		for _, f := range []string{"type", "bridge", "mtu", "nodes", "dns", "reversedns", "dnszone", "ipam"} {
+			changes = append(changes, compareField(f, current.Inputs, desired.Inputs)...)
+		}
+	case "proxmox:sdn_vnet":
+		for _, f := range []string{"zone", "tag", "alias", "vlanaware"} {
+			changes = append(changes, compareField(f, current.Inputs, desired.Inputs)...)
+		}
+	case "proxmox:sdn_subnet":
+		for _, f := range []string{"gateway", "snat", "dnszoneprefix"} {
+			changes = append(changes, compareField(f, current.Inputs, desired.Inputs)...)
+		}
+	case "proxmox:ha_group":
+		for _, f := range []string{"nodes", "restricted", "nofailback", "comment"} {
+			changes = append(changes, compareField(f, current.Inputs, desired.Inputs)...)
+		}
+	case "proxmox:ha_resource":
+		for _, f := range []string{"group", "max_relocate", "max_restart", "state", "comment"} {
+			changes = append(changes, compareField(f, current.Inputs, desired.Inputs)...)
+		}
+	case "proxmox:acme_account":
+		for _, f := range []string{"contact", "directory"} {
+			changes = append(changes, compareField(f, current.Inputs, desired.Inputs)...)
+		}
+	case "proxmox:user":
+		for _, f := range []string{"email", "firstname", "lastname", "groups", "enable", "expire", "comment"} {
+			changes = append(changes, compareField(f, current.Inputs, desired.Inputs)...)
+		}
+	case "proxmox:role":
+		changes = append(changes, compareField("privs", current.Inputs, desired.Inputs)...)
+	case "proxmox:acl":
+		for _, f := range []string{"roles", "users", "groups", "propagate"} {
+			changes = append(changes, compareField(f, current.Inputs, desired.Inputs)...)
+		}
+	case "proxmox:cluster_options":
+		for _, f := range []string{"keyboard", "language", "email_from", "migration_type", "migration_network"} {
 			changes = append(changes, compareField(f, current.Inputs, desired.Inputs)...)
 		}
 	}
@@ -1154,4 +1546,691 @@ func splitNetworkID(externalID string) (nodeName, iface string, err error) {
 		return "", "", fmt.Errorf("proxmox: invalid network externalID %q (expected <node>/<iface>)", externalID)
 	}
 	return externalID[:idx], externalID[idx+1:], nil
+}
+
+// ── Firewall rule resource handlers ─────────────────────────────────────────
+
+func firewallRuleFromInputs(inputs core.Inputs) FirewallRuleInfo {
+	getString := func(k string) string { v, _ := inputs[k].(string); return v }
+	getBool := func(k string) bool { v, _ := inputs[k].(bool); return v }
+	return FirewallRuleInfo{
+		Type:    getString("type"),
+		Action:  getString("action"),
+		Source:  getString("source"),
+		Dest:    getString("dest"),
+		Proto:   getString("proto"),
+		DPort:   getString("dport"),
+		SPort:   getString("sport"),
+		Enable:  getBool("enable"),
+		Comment: getString("comment"),
+		Log:     getString("log"),
+		Macro:   getString("macro"),
+		Iface:   getString("iface"),
+	}
+}
+
+// firewallScope returns the API scope path for a firewall rule.
+// Cluster-level if no node/vmid, node-level if node set, VM-level if vmid set.
+func firewallScope(inputs core.Inputs, node string) string {
+	if vmid, ok := toInt(inputs["vmid"]); ok && vmid > 0 {
+		return fmt.Sprintf("%s/%d", node, vmid)
+	}
+	if n, ok := inputs["node"].(string); ok && n != "" {
+		return n
+	}
+	return "cluster"
+}
+
+func (p *ProxmoxProvider) createFirewallRule(ctx context.Context, args core.ResourceArgs) (*core.ResourceState, error) {
+	scope := firewallScope(args.Inputs, p.node)
+	rule := firewallRuleFromInputs(args.Inputs)
+
+	pos, err := p.api.CreateFirewallRule(ctx, scope, rule)
+	if err != nil {
+		return nil, fmt.Errorf("proxmox: create firewall rule %q: %w", args.Name, err)
+	}
+
+	return &core.ResourceState{
+		ID:         proxmoxResourceID(args),
+		Type:       args.Type,
+		Name:       args.Name,
+		Status:     core.StatusRunning,
+		Inputs:     args.Inputs,
+		Outputs:    core.Outputs{"pos": pos, "scope": scope},
+		ExternalID: fmt.Sprintf("%s/%d", scope, pos),
+		ProviderID: "proxmox",
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	}, nil
+}
+
+func (p *ProxmoxProvider) readFirewallRule(ctx context.Context, id core.ResourceID, externalID string) (*core.ResourceState, error) {
+	// externalID format: "<scope>/<pos>"
+	idx := strings.LastIndex(externalID, "/")
+	if idx <= 0 {
+		return nil, fmt.Errorf("proxmox: invalid firewall rule externalID %q", externalID)
+	}
+	scope := externalID[:idx]
+	pos, err := strconv.Atoi(externalID[idx+1:])
+	if err != nil {
+		return nil, fmt.Errorf("proxmox: invalid firewall rule pos in %q: %w", externalID, err)
+	}
+
+	info, err := p.api.ReadFirewallRule(ctx, scope, pos)
+	if err != nil {
+		return nil, err
+	}
+	if info == nil {
+		return nil, nil
+	}
+
+	inputs := core.Inputs{
+		"type":   info.Type,
+		"action": info.Action,
+		"enable": info.Enable,
+	}
+	setIfNonEmpty := func(k, v string) { if v != "" { inputs[k] = v } }
+	setIfNonEmpty("source", info.Source)
+	setIfNonEmpty("dest", info.Dest)
+	setIfNonEmpty("proto", info.Proto)
+	setIfNonEmpty("dport", info.DPort)
+	setIfNonEmpty("sport", info.SPort)
+	setIfNonEmpty("comment", info.Comment)
+	setIfNonEmpty("log", info.Log)
+	setIfNonEmpty("macro", info.Macro)
+	setIfNonEmpty("iface", info.Iface)
+
+	return &core.ResourceState{
+		ID:         id,
+		Type:       "proxmox:firewall_rule",
+		ExternalID: externalID,
+		ProviderID: "proxmox",
+		Status:     core.StatusRunning,
+		Inputs:     inputs,
+		Outputs:    core.Outputs{"pos": pos, "scope": scope},
+		UpdatedAt:  time.Now(),
+	}, nil
+}
+
+func (p *ProxmoxProvider) updateFirewallRule(ctx context.Context, current *core.ResourceState, desired core.ResourceArgs) (*core.ResourceState, error) {
+	idx := strings.LastIndex(current.ExternalID, "/")
+	if idx <= 0 {
+		return nil, fmt.Errorf("proxmox: invalid firewall rule externalID %q", current.ExternalID)
+	}
+	scope := current.ExternalID[:idx]
+	pos, err := strconv.Atoi(current.ExternalID[idx+1:])
+	if err != nil {
+		return nil, err
+	}
+
+	rule := firewallRuleFromInputs(desired.Inputs)
+	if err := p.api.UpdateFirewallRule(ctx, scope, pos, rule); err != nil {
+		return nil, err
+	}
+
+	return p.readFirewallRule(ctx, proxmoxResourceID(desired), current.ExternalID)
+}
+
+func (p *ProxmoxProvider) deleteFirewallRule(ctx context.Context, state *core.ResourceState) error {
+	idx := strings.LastIndex(state.ExternalID, "/")
+	if idx <= 0 {
+		return fmt.Errorf("proxmox: invalid firewall rule externalID %q", state.ExternalID)
+	}
+	scope := state.ExternalID[:idx]
+	pos, err := strconv.Atoi(state.ExternalID[idx+1:])
+	if err != nil {
+		return err
+	}
+	return p.api.DeleteFirewallRule(ctx, scope, pos)
+}
+
+// ── Snapshot resource handlers ──────────────────────────────────────────────
+
+func (p *ProxmoxProvider) createSnapshot(ctx context.Context, args core.ResourceArgs) (*core.ResourceState, error) {
+	vmid, ok := toInt(args.Inputs["vmid"])
+	if !ok || vmid == 0 {
+		return nil, fmt.Errorf("proxmox: snapshot requires vmid")
+	}
+	snapName := getStringInputFallback(args.Inputs, "name", args.Name)
+	description, _ := args.Inputs["description"].(string)
+	vmstate, _ := args.Inputs["vmstate"].(bool)
+
+	if err := p.api.CreateSnapshot(ctx, vmid, snapName, description, vmstate); err != nil {
+		return nil, fmt.Errorf("proxmox: create snapshot %q on vm %d: %w", snapName, vmid, err)
+	}
+
+	externalID := fmt.Sprintf("%d/%s", vmid, snapName)
+	return &core.ResourceState{
+		ID:         proxmoxResourceID(args),
+		Type:       args.Type,
+		Name:       args.Name,
+		Status:     core.StatusRunning,
+		Inputs:     args.Inputs,
+		Outputs:    core.Outputs{"vmid": vmid, "snapshot": snapName},
+		ExternalID: externalID,
+		ProviderID: "proxmox",
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	}, nil
+}
+
+func (p *ProxmoxProvider) readSnapshot(ctx context.Context, id core.ResourceID, externalID string) (*core.ResourceState, error) {
+	// externalID format: "<vmid>/<snapname>"
+	idx := strings.Index(externalID, "/")
+	if idx <= 0 {
+		return nil, fmt.Errorf("proxmox: invalid snapshot externalID %q", externalID)
+	}
+	vmid, err := strconv.Atoi(externalID[:idx])
+	if err != nil {
+		return nil, fmt.Errorf("proxmox: invalid snapshot vmid in %q: %w", externalID, err)
+	}
+	snapName := externalID[idx+1:]
+
+	info, err := p.api.ReadSnapshot(ctx, vmid, snapName)
+	if err != nil {
+		return nil, err
+	}
+	if info == nil {
+		return nil, nil
+	}
+
+	inputs := core.Inputs{
+		"vmid":    vmid,
+		"name":    info.Name,
+		"vmstate": info.VMState,
+	}
+	if info.Description != "" {
+		inputs["description"] = info.Description
+	}
+
+	return &core.ResourceState{
+		ID:         id,
+		Type:       "proxmox:snapshot",
+		ExternalID: externalID,
+		ProviderID: "proxmox",
+		Status:     core.StatusRunning,
+		Inputs:     inputs,
+		Outputs:    core.Outputs{"vmid": vmid, "snapshot": snapName},
+		UpdatedAt:  time.Now(),
+	}, nil
+}
+
+func (p *ProxmoxProvider) deleteSnapshot(ctx context.Context, state *core.ResourceState) error {
+	idx := strings.Index(state.ExternalID, "/")
+	if idx <= 0 {
+		return fmt.Errorf("proxmox: invalid snapshot externalID %q", state.ExternalID)
+	}
+	vmid, err := strconv.Atoi(state.ExternalID[:idx])
+	if err != nil {
+		return err
+	}
+	snapName := state.ExternalID[idx+1:]
+	return p.api.DeleteSnapshot(ctx, vmid, snapName)
+}
+
+// ── Pool resource handlers ──────────────────────────────────────────────────
+
+func (p *ProxmoxProvider) createPool(ctx context.Context, args core.ResourceArgs) (*core.ResourceState, error) {
+	poolid := getStringInputFallback(args.Inputs, "poolid", args.Name)
+	comment, _ := args.Inputs["comment"].(string)
+
+	if err := p.api.CreatePool(ctx, poolid, comment); err != nil {
+		return nil, fmt.Errorf("proxmox: create pool %q: %w", poolid, err)
+	}
+
+	return &core.ResourceState{
+		ID:         proxmoxResourceID(args),
+		Type:       args.Type,
+		Name:       args.Name,
+		Status:     core.StatusRunning,
+		Inputs:     args.Inputs,
+		Outputs:    core.Outputs{"poolid": poolid},
+		ExternalID: poolid,
+		ProviderID: "proxmox",
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	}, nil
+}
+
+func (p *ProxmoxProvider) readPool(ctx context.Context, id core.ResourceID, externalID string) (*core.ResourceState, error) {
+	info, err := p.api.ReadPool(ctx, externalID)
+	if err != nil {
+		return nil, err
+	}
+	if info == nil {
+		return nil, nil
+	}
+
+	inputs := core.Inputs{"poolid": info.PoolID}
+	if info.Comment != "" {
+		inputs["comment"] = info.Comment
+	}
+
+	return &core.ResourceState{
+		ID:         id,
+		Type:       "proxmox:pool",
+		ExternalID: externalID,
+		ProviderID: "proxmox",
+		Status:     core.StatusRunning,
+		Inputs:     inputs,
+		Outputs:    core.Outputs{"poolid": info.PoolID},
+		UpdatedAt:  time.Now(),
+	}, nil
+}
+
+func (p *ProxmoxProvider) updatePool(ctx context.Context, current *core.ResourceState, desired core.ResourceArgs) (*core.ResourceState, error) {
+	comment, _ := desired.Inputs["comment"].(string)
+	if err := p.api.UpdatePool(ctx, current.ExternalID, comment); err != nil {
+		return nil, err
+	}
+	return p.readPool(ctx, proxmoxResourceID(desired), current.ExternalID)
+}
+
+func (p *ProxmoxProvider) deletePool(ctx context.Context, state *core.ResourceState) error {
+	return p.api.DeletePool(ctx, state.ExternalID)
+}
+
+// ── Backup job resource handlers ────────────────────────────────────────────
+
+func backupJobFromInputs(inputs core.Inputs) BackupJobInfo {
+	getString := func(k string) string { v, _ := inputs[k].(string); return v }
+	getBool := func(k string) bool { v, _ := inputs[k].(bool); return v }
+	return BackupJobInfo{
+		VMID:         getString("vmid"),
+		Storage:      getString("storage"),
+		Mode:         getString("mode"),
+		Compress:     getString("compress"),
+		Mailto:       getString("mailto"),
+		Schedule:     getString("schedule"),
+		Enabled:      getBool("enabled"),
+		PruneBackups: getString("prune_backups"),
+	}
+}
+
+func (p *ProxmoxProvider) createBackupJob(ctx context.Context, args core.ResourceArgs) (*core.ResourceState, error) {
+	job := backupJobFromInputs(args.Inputs)
+
+	id, err := p.api.CreateBackupJob(ctx, job)
+	if err != nil {
+		return nil, fmt.Errorf("proxmox: create backup job %q: %w", args.Name, err)
+	}
+
+	return &core.ResourceState{
+		ID:         proxmoxResourceID(args),
+		Type:       args.Type,
+		Name:       args.Name,
+		Status:     core.StatusRunning,
+		Inputs:     args.Inputs,
+		Outputs:    core.Outputs{"job_id": id},
+		ExternalID: id,
+		ProviderID: "proxmox",
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	}, nil
+}
+
+func (p *ProxmoxProvider) readBackupJob(ctx context.Context, resID core.ResourceID, externalID string) (*core.ResourceState, error) {
+	info, err := p.api.ReadBackupJob(ctx, externalID)
+	if err != nil {
+		return nil, err
+	}
+	if info == nil {
+		return nil, nil
+	}
+
+	inputs := core.Inputs{"enabled": info.Enabled}
+	setIfNonEmpty := func(k, v string) { if v != "" { inputs[k] = v } }
+	setIfNonEmpty("vmid", info.VMID)
+	setIfNonEmpty("storage", info.Storage)
+	setIfNonEmpty("mode", info.Mode)
+	setIfNonEmpty("compress", info.Compress)
+	setIfNonEmpty("mailto", info.Mailto)
+	setIfNonEmpty("schedule", info.Schedule)
+	setIfNonEmpty("prune_backups", info.PruneBackups)
+
+	return &core.ResourceState{
+		ID:         resID,
+		Type:       "proxmox:backup",
+		ExternalID: externalID,
+		ProviderID: "proxmox",
+		Status:     core.StatusRunning,
+		Inputs:     inputs,
+		Outputs:    core.Outputs{"job_id": externalID},
+		UpdatedAt:  time.Now(),
+	}, nil
+}
+
+func (p *ProxmoxProvider) updateBackupJob(ctx context.Context, current *core.ResourceState, desired core.ResourceArgs) (*core.ResourceState, error) {
+	job := backupJobFromInputs(desired.Inputs)
+	if err := p.api.UpdateBackupJob(ctx, current.ExternalID, job); err != nil {
+		return nil, err
+	}
+	return p.readBackupJob(ctx, proxmoxResourceID(desired), current.ExternalID)
+}
+
+func (p *ProxmoxProvider) deleteBackupJob(ctx context.Context, state *core.ResourceState) error {
+	return p.api.DeleteBackupJob(ctx, state.ExternalID)
+}
+
+// ── SDN Zone resource handlers ──────────────────────────────────────────────
+
+func sdnZoneFromInputs(inputs core.Inputs) SDNZoneInfo {
+	gs := func(k string) string { v, _ := inputs[k].(string); return v }
+	gi := func(k string) int { v, _ := toInt(inputs[k]); return v }
+	return SDNZoneInfo{Zone: gs("zone"), Type: gs("type"), Bridge: gs("bridge"), MTU: gi("mtu"), Nodes: gs("nodes"), DNS: gs("dns"), ReverseDNS: gs("reversedns"), DNSZone: gs("dnszone"), IPAM: gs("ipam")}
+}
+
+func sdnZoneToInputs(info *SDNZoneInfo) core.Inputs {
+	inputs := core.Inputs{"zone": info.Zone, "type": info.Type}
+	s := func(k, v string) { if v != "" { inputs[k] = v } }
+	s("bridge", info.Bridge); s("nodes", info.Nodes); s("dns", info.DNS); s("reversedns", info.ReverseDNS); s("dnszone", info.DNSZone); s("ipam", info.IPAM)
+	if info.MTU != 0 { inputs["mtu"] = info.MTU }
+	return inputs
+}
+
+func (p *ProxmoxProvider) createSDNZone(ctx context.Context, args core.ResourceArgs) (*core.ResourceState, error) {
+	info := sdnZoneFromInputs(args.Inputs)
+	if info.Zone == "" { info.Zone = args.Name }
+	if err := p.api.CreateSDNZone(ctx, info); err != nil {
+		return nil, fmt.Errorf("proxmox: create sdn_zone %q: %w", info.Zone, err)
+	}
+	return &core.ResourceState{ID: proxmoxResourceID(args), Type: args.Type, Name: args.Name, Status: core.StatusRunning, Inputs: args.Inputs, Outputs: core.Outputs{"zone": info.Zone}, ExternalID: info.Zone, ProviderID: "proxmox", CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
+}
+
+func (p *ProxmoxProvider) readSDNZoneRes(ctx context.Context, id core.ResourceID, externalID string) (*core.ResourceState, error) {
+	info, err := p.api.ReadSDNZone(ctx, externalID)
+	if err != nil { return nil, err }
+	if info == nil { return nil, nil }
+	return &core.ResourceState{ID: id, Type: "proxmox:sdn_zone", ExternalID: externalID, ProviderID: "proxmox", Status: core.StatusRunning, Inputs: sdnZoneToInputs(info), Outputs: core.Outputs{"zone": info.Zone}, UpdatedAt: time.Now()}, nil
+}
+
+func (p *ProxmoxProvider) updateSDNZoneRes(ctx context.Context, current *core.ResourceState, desired core.ResourceArgs) (*core.ResourceState, error) {
+	info := sdnZoneFromInputs(desired.Inputs)
+	if err := p.api.UpdateSDNZone(ctx, current.ExternalID, info); err != nil { return nil, err }
+	return p.readSDNZoneRes(ctx, proxmoxResourceID(desired), current.ExternalID)
+}
+
+// ── SDN Vnet resource handlers ──────────────────────────────────────────────
+
+func sdnVnetFromInputs(inputs core.Inputs) SDNVnetInfo {
+	gs := func(k string) string { v, _ := inputs[k].(string); return v }
+	gi := func(k string) int { v, _ := toInt(inputs[k]); return v }
+	gb := func(k string) bool { v, _ := inputs[k].(bool); return v }
+	return SDNVnetInfo{Vnet: gs("vnet"), Zone: gs("zone"), Tag: gi("tag"), Alias: gs("alias"), VlanAware: gb("vlanaware")}
+}
+
+func sdnVnetToInputs(info *SDNVnetInfo) core.Inputs {
+	inputs := core.Inputs{"vnet": info.Vnet, "zone": info.Zone}
+	if info.Tag != 0 { inputs["tag"] = info.Tag }
+	if info.Alias != "" { inputs["alias"] = info.Alias }
+	if info.VlanAware { inputs["vlanaware"] = true }
+	return inputs
+}
+
+func (p *ProxmoxProvider) createSDNVnet(ctx context.Context, args core.ResourceArgs) (*core.ResourceState, error) {
+	info := sdnVnetFromInputs(args.Inputs)
+	if info.Vnet == "" { info.Vnet = args.Name }
+	if err := p.api.CreateSDNVnet(ctx, info); err != nil {
+		return nil, fmt.Errorf("proxmox: create sdn_vnet %q: %w", info.Vnet, err)
+	}
+	return &core.ResourceState{ID: proxmoxResourceID(args), Type: args.Type, Name: args.Name, Status: core.StatusRunning, Inputs: args.Inputs, Outputs: core.Outputs{"vnet": info.Vnet}, ExternalID: info.Vnet, ProviderID: "proxmox", CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
+}
+
+func (p *ProxmoxProvider) readSDNVnetRes(ctx context.Context, id core.ResourceID, externalID string) (*core.ResourceState, error) {
+	info, err := p.api.ReadSDNVnet(ctx, externalID)
+	if err != nil { return nil, err }
+	if info == nil { return nil, nil }
+	return &core.ResourceState{ID: id, Type: "proxmox:sdn_vnet", ExternalID: externalID, ProviderID: "proxmox", Status: core.StatusRunning, Inputs: sdnVnetToInputs(info), Outputs: core.Outputs{"vnet": info.Vnet}, UpdatedAt: time.Now()}, nil
+}
+
+func (p *ProxmoxProvider) updateSDNVnetRes(ctx context.Context, current *core.ResourceState, desired core.ResourceArgs) (*core.ResourceState, error) {
+	info := sdnVnetFromInputs(desired.Inputs)
+	if err := p.api.UpdateSDNVnet(ctx, current.ExternalID, info); err != nil { return nil, err }
+	return p.readSDNVnetRes(ctx, proxmoxResourceID(desired), current.ExternalID)
+}
+
+// ── SDN Subnet resource handlers ────────────────────────────────────────────
+
+func (p *ProxmoxProvider) createSDNSubnet(ctx context.Context, args core.ResourceArgs) (*core.ResourceState, error) {
+	gs := func(k string) string { v, _ := args.Inputs[k].(string); return v }
+	gb := func(k string) bool { v, _ := args.Inputs[k].(bool); return v }
+	vnet := gs("vnet")
+	info := SDNSubnetInfo{Subnet: gs("subnet"), Vnet: vnet, Gateway: gs("gateway"), SNAT: gb("snat"), DNSZonePrefix: gs("dnszoneprefix")}
+	if err := p.api.CreateSDNSubnet(ctx, vnet, info); err != nil {
+		return nil, fmt.Errorf("proxmox: create sdn_subnet %q: %w", info.Subnet, err)
+	}
+	eid := vnet + "/" + info.Subnet
+	return &core.ResourceState{ID: proxmoxResourceID(args), Type: args.Type, Name: args.Name, Status: core.StatusRunning, Inputs: args.Inputs, Outputs: core.Outputs{"subnet": info.Subnet, "vnet": vnet}, ExternalID: eid, ProviderID: "proxmox", CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
+}
+
+func (p *ProxmoxProvider) readSDNSubnetRes(ctx context.Context, id core.ResourceID, externalID string) (*core.ResourceState, error) {
+	parts := strings.SplitN(externalID, "/", 2)
+	if len(parts) != 2 { return nil, fmt.Errorf("proxmox: invalid sdn_subnet externalID %q", externalID) }
+	info, err := p.api.ReadSDNSubnet(ctx, parts[0], parts[1])
+	if err != nil { return nil, err }
+	if info == nil { return nil, nil }
+	inputs := core.Inputs{"subnet": info.Subnet, "vnet": info.Vnet}
+	if info.Gateway != "" { inputs["gateway"] = info.Gateway }
+	if info.SNAT { inputs["snat"] = true }
+	if info.DNSZonePrefix != "" { inputs["dnszoneprefix"] = info.DNSZonePrefix }
+	return &core.ResourceState{ID: id, Type: "proxmox:sdn_subnet", ExternalID: externalID, ProviderID: "proxmox", Status: core.StatusRunning, Inputs: inputs, Outputs: core.Outputs{"subnet": info.Subnet, "vnet": info.Vnet}, UpdatedAt: time.Now()}, nil
+}
+
+func (p *ProxmoxProvider) updateSDNSubnetRes(ctx context.Context, current *core.ResourceState, desired core.ResourceArgs) (*core.ResourceState, error) {
+	parts := strings.SplitN(current.ExternalID, "/", 2)
+	if len(parts) != 2 { return nil, fmt.Errorf("proxmox: invalid sdn_subnet externalID %q", current.ExternalID) }
+	gs := func(k string) string { v, _ := desired.Inputs[k].(string); return v }
+	gb := func(k string) bool { v, _ := desired.Inputs[k].(bool); return v }
+	info := SDNSubnetInfo{Subnet: gs("subnet"), Vnet: parts[0], Gateway: gs("gateway"), SNAT: gb("snat"), DNSZonePrefix: gs("dnszoneprefix")}
+	if err := p.api.UpdateSDNSubnet(ctx, parts[0], parts[1], info); err != nil { return nil, err }
+	return p.readSDNSubnetRes(ctx, proxmoxResourceID(desired), current.ExternalID)
+}
+
+// ── HA Group resource handlers ──────────────────────────────────────────────
+
+func haGroupFromInputs(inputs core.Inputs) HAGroupInfo {
+	gs := func(k string) string { v, _ := inputs[k].(string); return v }
+	gb := func(k string) bool { v, _ := inputs[k].(bool); return v }
+	return HAGroupInfo{Group: gs("group"), Nodes: gs("nodes"), Restricted: gb("restricted"), NoFailback: gb("nofailback"), Comment: gs("comment")}
+}
+
+func haGroupToInputs(info *HAGroupInfo) core.Inputs {
+	inputs := core.Inputs{"group": info.Group}
+	if info.Nodes != "" { inputs["nodes"] = info.Nodes }
+	if info.Restricted { inputs["restricted"] = true }
+	if info.NoFailback { inputs["nofailback"] = true }
+	if info.Comment != "" { inputs["comment"] = info.Comment }
+	return inputs
+}
+
+func (p *ProxmoxProvider) createHAGroup(ctx context.Context, args core.ResourceArgs) (*core.ResourceState, error) {
+	info := haGroupFromInputs(args.Inputs)
+	if info.Group == "" { info.Group = args.Name }
+	if err := p.api.CreateHAGroup(ctx, info); err != nil { return nil, fmt.Errorf("proxmox: create ha_group %q: %w", info.Group, err) }
+	return &core.ResourceState{ID: proxmoxResourceID(args), Type: args.Type, Name: args.Name, Status: core.StatusRunning, Inputs: args.Inputs, Outputs: core.Outputs{"group": info.Group}, ExternalID: info.Group, ProviderID: "proxmox", CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
+}
+
+func (p *ProxmoxProvider) readHAGroupRes(ctx context.Context, id core.ResourceID, externalID string) (*core.ResourceState, error) {
+	info, err := p.api.ReadHAGroup(ctx, externalID)
+	if err != nil { return nil, err }
+	if info == nil { return nil, nil }
+	return &core.ResourceState{ID: id, Type: "proxmox:ha_group", ExternalID: externalID, ProviderID: "proxmox", Status: core.StatusRunning, Inputs: haGroupToInputs(info), Outputs: core.Outputs{"group": info.Group}, UpdatedAt: time.Now()}, nil
+}
+
+func (p *ProxmoxProvider) updateHAGroupRes(ctx context.Context, current *core.ResourceState, desired core.ResourceArgs) (*core.ResourceState, error) {
+	info := haGroupFromInputs(desired.Inputs)
+	if err := p.api.UpdateHAGroup(ctx, current.ExternalID, info); err != nil { return nil, err }
+	return p.readHAGroupRes(ctx, proxmoxResourceID(desired), current.ExternalID)
+}
+
+// ── HA Resource handlers ────────────────────────────────────────────────────
+
+func haResourceFromInputs(inputs core.Inputs) HAResourceInfo {
+	gs := func(k string) string { v, _ := inputs[k].(string); return v }
+	gi := func(k string) int { v, _ := toInt(inputs[k]); return v }
+	return HAResourceInfo{SID: gs("sid"), Group: gs("group"), MaxRelocate: gi("max_relocate"), MaxRestart: gi("max_restart"), State: gs("state"), Comment: gs("comment")}
+}
+
+func haResourceToInputs(info *HAResourceInfo) core.Inputs {
+	inputs := core.Inputs{"sid": info.SID}
+	if info.Group != "" { inputs["group"] = info.Group }
+	if info.MaxRelocate != 0 { inputs["max_relocate"] = info.MaxRelocate }
+	if info.MaxRestart != 0 { inputs["max_restart"] = info.MaxRestart }
+	if info.State != "" { inputs["state"] = info.State }
+	if info.Comment != "" { inputs["comment"] = info.Comment }
+	return inputs
+}
+
+func (p *ProxmoxProvider) createHAResource(ctx context.Context, args core.ResourceArgs) (*core.ResourceState, error) {
+	info := haResourceFromInputs(args.Inputs)
+	if err := p.api.CreateHAResource(ctx, info); err != nil { return nil, fmt.Errorf("proxmox: create ha_resource %q: %w", info.SID, err) }
+	return &core.ResourceState{ID: proxmoxResourceID(args), Type: args.Type, Name: args.Name, Status: core.StatusRunning, Inputs: args.Inputs, Outputs: core.Outputs{"sid": info.SID}, ExternalID: info.SID, ProviderID: "proxmox", CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
+}
+
+func (p *ProxmoxProvider) readHAResourceRes(ctx context.Context, id core.ResourceID, externalID string) (*core.ResourceState, error) {
+	info, err := p.api.ReadHAResource(ctx, externalID)
+	if err != nil { return nil, err }
+	if info == nil { return nil, nil }
+	return &core.ResourceState{ID: id, Type: "proxmox:ha_resource", ExternalID: externalID, ProviderID: "proxmox", Status: core.StatusRunning, Inputs: haResourceToInputs(info), Outputs: core.Outputs{"sid": info.SID}, UpdatedAt: time.Now()}, nil
+}
+
+func (p *ProxmoxProvider) updateHAResourceRes(ctx context.Context, current *core.ResourceState, desired core.ResourceArgs) (*core.ResourceState, error) {
+	info := haResourceFromInputs(desired.Inputs)
+	if err := p.api.UpdateHAResource(ctx, current.ExternalID, info); err != nil { return nil, err }
+	return p.readHAResourceRes(ctx, proxmoxResourceID(desired), current.ExternalID)
+}
+
+// ── ACME Account resource handlers ──────────────────────────────────────────
+
+func (p *ProxmoxProvider) createACMEAccount(ctx context.Context, args core.ResourceArgs) (*core.ResourceState, error) {
+	gs := func(k string) string { v, _ := args.Inputs[k].(string); return v }
+	info := ACMEAccountInfo{Name: getStringInputFallback(args.Inputs, "name", args.Name), Contact: gs("contact"), Directory: gs("directory")}
+	if err := p.api.CreateACMEAccount(ctx, info); err != nil { return nil, fmt.Errorf("proxmox: create acme_account %q: %w", info.Name, err) }
+	return &core.ResourceState{ID: proxmoxResourceID(args), Type: args.Type, Name: args.Name, Status: core.StatusRunning, Inputs: args.Inputs, Outputs: core.Outputs{"name": info.Name}, ExternalID: info.Name, ProviderID: "proxmox", CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
+}
+
+func (p *ProxmoxProvider) readACMEAccountRes(ctx context.Context, id core.ResourceID, externalID string) (*core.ResourceState, error) {
+	info, err := p.api.ReadACMEAccount(ctx, externalID)
+	if err != nil { return nil, err }
+	if info == nil { return nil, nil }
+	inputs := core.Inputs{"name": info.Name}
+	if info.Contact != "" { inputs["contact"] = info.Contact }
+	if info.Directory != "" { inputs["directory"] = info.Directory }
+	return &core.ResourceState{ID: id, Type: "proxmox:acme_account", ExternalID: externalID, ProviderID: "proxmox", Status: core.StatusRunning, Inputs: inputs, Outputs: core.Outputs{"name": info.Name}, UpdatedAt: time.Now()}, nil
+}
+
+// ── User resource handlers ──────────────────────────────────────────────────
+
+func pveUserFromInputs(inputs core.Inputs) PVEUserInfo {
+	gs := func(k string) string { v, _ := inputs[k].(string); return v }
+	gb := func(k string) bool { v, _ := inputs[k].(bool); return v }
+	gi := func(k string) int { v, _ := toInt(inputs[k]); return v }
+	return PVEUserInfo{UserID: gs("userid"), Email: gs("email"), FirstName: gs("firstname"), LastName: gs("lastname"), Groups: gs("groups"), Enable: gb("enable"), Expire: gi("expire"), Comment: gs("comment")}
+}
+
+func pveUserToInputs(info *PVEUserInfo) core.Inputs {
+	inputs := core.Inputs{"userid": info.UserID, "enable": info.Enable}
+	s := func(k, v string) { if v != "" { inputs[k] = v } }
+	s("email", info.Email); s("firstname", info.FirstName); s("lastname", info.LastName); s("groups", info.Groups); s("comment", info.Comment)
+	if info.Expire != 0 { inputs["expire"] = info.Expire }
+	return inputs
+}
+
+func (p *ProxmoxProvider) createUser(ctx context.Context, args core.ResourceArgs) (*core.ResourceState, error) {
+	info := pveUserFromInputs(args.Inputs)
+	if err := p.api.CreateUser(ctx, info); err != nil { return nil, fmt.Errorf("proxmox: create user %q: %w", info.UserID, err) }
+	return &core.ResourceState{ID: proxmoxResourceID(args), Type: args.Type, Name: args.Name, Status: core.StatusRunning, Inputs: args.Inputs, Outputs: core.Outputs{"userid": info.UserID}, ExternalID: info.UserID, ProviderID: "proxmox", CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
+}
+
+func (p *ProxmoxProvider) readUserRes(ctx context.Context, id core.ResourceID, externalID string) (*core.ResourceState, error) {
+	info, err := p.api.ReadUser(ctx, externalID)
+	if err != nil { return nil, err }
+	if info == nil { return nil, nil }
+	return &core.ResourceState{ID: id, Type: "proxmox:user", ExternalID: externalID, ProviderID: "proxmox", Status: core.StatusRunning, Inputs: pveUserToInputs(info), Outputs: core.Outputs{"userid": info.UserID}, UpdatedAt: time.Now()}, nil
+}
+
+func (p *ProxmoxProvider) updateUserRes(ctx context.Context, current *core.ResourceState, desired core.ResourceArgs) (*core.ResourceState, error) {
+	info := pveUserFromInputs(desired.Inputs)
+	if err := p.api.UpdateUser(ctx, current.ExternalID, info); err != nil { return nil, err }
+	return p.readUserRes(ctx, proxmoxResourceID(desired), current.ExternalID)
+}
+
+// ── Role resource handlers ──────────────────────────────────────────────────
+
+func (p *ProxmoxProvider) createRole(ctx context.Context, args core.ResourceArgs) (*core.ResourceState, error) {
+	gs := func(k string) string { v, _ := args.Inputs[k].(string); return v }
+	info := PVERoleInfo{RoleID: getStringInputFallback(args.Inputs, "roleid", args.Name), Privs: gs("privs")}
+	if err := p.api.CreateRole(ctx, info); err != nil { return nil, fmt.Errorf("proxmox: create role %q: %w", info.RoleID, err) }
+	return &core.ResourceState{ID: proxmoxResourceID(args), Type: args.Type, Name: args.Name, Status: core.StatusRunning, Inputs: args.Inputs, Outputs: core.Outputs{"roleid": info.RoleID}, ExternalID: info.RoleID, ProviderID: "proxmox", CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
+}
+
+func (p *ProxmoxProvider) readRoleRes(ctx context.Context, id core.ResourceID, externalID string) (*core.ResourceState, error) {
+	info, err := p.api.ReadRole(ctx, externalID)
+	if err != nil { return nil, err }
+	if info == nil { return nil, nil }
+	inputs := core.Inputs{"roleid": info.RoleID}
+	if info.Privs != "" { inputs["privs"] = info.Privs }
+	return &core.ResourceState{ID: id, Type: "proxmox:role", ExternalID: externalID, ProviderID: "proxmox", Status: core.StatusRunning, Inputs: inputs, Outputs: core.Outputs{"roleid": info.RoleID}, UpdatedAt: time.Now()}, nil
+}
+
+func (p *ProxmoxProvider) updateRoleRes(ctx context.Context, current *core.ResourceState, desired core.ResourceArgs) (*core.ResourceState, error) {
+	gs := func(k string) string { v, _ := desired.Inputs[k].(string); return v }
+	info := PVERoleInfo{RoleID: current.ExternalID, Privs: gs("privs")}
+	if err := p.api.UpdateRole(ctx, current.ExternalID, info); err != nil { return nil, err }
+	return p.readRoleRes(ctx, proxmoxResourceID(desired), current.ExternalID)
+}
+
+// ── ACL resource handlers ───────────────────────────────────────────────────
+
+func (p *ProxmoxProvider) createACL(ctx context.Context, args core.ResourceArgs) (*core.ResourceState, error) {
+	gs := func(k string) string { v, _ := args.Inputs[k].(string); return v }
+	gb := func(k string) bool { v, _ := args.Inputs[k].(bool); return v }
+	info := PVEACLInfo{Path: gs("path"), Roles: gs("roles"), Users: gs("users"), Groups: gs("groups"), Propagate: gb("propagate")}
+	if err := p.api.SetACL(ctx, info); err != nil { return nil, fmt.Errorf("proxmox: set acl on %q: %w", info.Path, err) }
+	return &core.ResourceState{ID: proxmoxResourceID(args), Type: args.Type, Name: args.Name, Status: core.StatusRunning, Inputs: args.Inputs, Outputs: core.Outputs{"path": info.Path}, ExternalID: info.Path, ProviderID: "proxmox", CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
+}
+
+func (p *ProxmoxProvider) readACLRes(ctx context.Context, id core.ResourceID, externalID string) (*core.ResourceState, error) {
+	info, err := p.api.ReadACL(ctx, externalID)
+	if err != nil { return nil, err }
+	if info == nil { return nil, nil }
+	inputs := core.Inputs{"path": info.Path}
+	if info.Roles != "" { inputs["roles"] = info.Roles }
+	if info.Users != "" { inputs["users"] = info.Users }
+	if info.Groups != "" { inputs["groups"] = info.Groups }
+	if info.Propagate { inputs["propagate"] = true }
+	return &core.ResourceState{ID: id, Type: "proxmox:acl", ExternalID: externalID, ProviderID: "proxmox", Status: core.StatusRunning, Inputs: inputs, Outputs: core.Outputs{"path": info.Path}, UpdatedAt: time.Now()}, nil
+}
+
+// ── Cluster Options resource handlers ───────────────────────────────────────
+
+func clusterOptsFromInputs(inputs core.Inputs) ClusterOptionsInfo {
+	gs := func(k string) string { v, _ := inputs[k].(string); return v }
+	return ClusterOptionsInfo{Keyboard: gs("keyboard"), Language: gs("language"), EmailFrom: gs("email_from"), MigrationType: gs("migration_type"), MigrationNetwork: gs("migration_network")}
+}
+
+func clusterOptsToInputs(info *ClusterOptionsInfo) core.Inputs {
+	inputs := core.Inputs{}
+	s := func(k, v string) { if v != "" { inputs[k] = v } }
+	s("keyboard", info.Keyboard); s("language", info.Language); s("email_from", info.EmailFrom); s("migration_type", info.MigrationType); s("migration_network", info.MigrationNetwork)
+	return inputs
+}
+
+func (p *ProxmoxProvider) createClusterOptions(ctx context.Context, args core.ResourceArgs) (*core.ResourceState, error) {
+	opts := clusterOptsFromInputs(args.Inputs)
+	if err := p.api.UpdateClusterOptions(ctx, opts); err != nil { return nil, fmt.Errorf("proxmox: set cluster options: %w", err) }
+	return &core.ResourceState{ID: proxmoxResourceID(args), Type: args.Type, Name: args.Name, Status: core.StatusRunning, Inputs: args.Inputs, Outputs: core.Outputs{}, ExternalID: "cluster", ProviderID: "proxmox", CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
+}
+
+func (p *ProxmoxProvider) readClusterOptionsRes(ctx context.Context, id core.ResourceID, externalID string) (*core.ResourceState, error) {
+	info, err := p.api.ReadClusterOptions(ctx)
+	if err != nil { return nil, err }
+	if info == nil { return nil, nil }
+	return &core.ResourceState{ID: id, Type: "proxmox:cluster_options", ExternalID: "cluster", ProviderID: "proxmox", Status: core.StatusRunning, Inputs: clusterOptsToInputs(info), Outputs: core.Outputs{}, UpdatedAt: time.Now()}, nil
+}
+
+func (p *ProxmoxProvider) updateClusterOptionsRes(ctx context.Context, current *core.ResourceState, desired core.ResourceArgs) (*core.ResourceState, error) {
+	opts := clusterOptsFromInputs(desired.Inputs)
+	if err := p.api.UpdateClusterOptions(ctx, opts); err != nil { return nil, err }
+	return p.readClusterOptionsRes(ctx, proxmoxResourceID(desired), "cluster")
 }

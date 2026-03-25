@@ -457,3 +457,194 @@ func applyNetworkConfig(nw *proxmox.NodeNetwork, cfg NetworkConfig) {
 		nw.Autostart = 0
 	}
 }
+
+// ── Firewall rules (stub) ───────────────────────────────────────────────────
+
+func (r *realProxmoxAPI) CreateFirewallRule(_ context.Context, _ string, _ FirewallRuleInfo) (int, error) {
+	return 0, fmt.Errorf("proxmox: CreateFirewallRule not yet implemented")
+}
+
+func (r *realProxmoxAPI) ReadFirewallRule(_ context.Context, _ string, _ int) (*FirewallRuleInfo, error) {
+	return nil, fmt.Errorf("proxmox: ReadFirewallRule not yet implemented")
+}
+
+func (r *realProxmoxAPI) UpdateFirewallRule(_ context.Context, _ string, _ int, _ FirewallRuleInfo) error {
+	return fmt.Errorf("proxmox: UpdateFirewallRule not yet implemented")
+}
+
+func (r *realProxmoxAPI) DeleteFirewallRule(_ context.Context, _ string, _ int) error {
+	return fmt.Errorf("proxmox: DeleteFirewallRule not yet implemented")
+}
+
+// ── Snapshots (stub) ────────────────────────────────────────────────────────
+
+func (r *realProxmoxAPI) CreateSnapshot(_ context.Context, _ int, _, _ string, _ bool) error {
+	return fmt.Errorf("proxmox: CreateSnapshot not yet implemented")
+}
+
+func (r *realProxmoxAPI) ReadSnapshot(_ context.Context, _ int, _ string) (*SnapshotInfo, error) {
+	return nil, fmt.Errorf("proxmox: ReadSnapshot not yet implemented")
+}
+
+func (r *realProxmoxAPI) DeleteSnapshot(_ context.Context, _ int, _ string) error {
+	return fmt.Errorf("proxmox: DeleteSnapshot not yet implemented")
+}
+
+// ── Pools (stub) ────────────────────────────────────────────────────────────
+
+func (r *realProxmoxAPI) CreatePool(_ context.Context, _, _ string) error {
+	return fmt.Errorf("proxmox: CreatePool not yet implemented")
+}
+
+func (r *realProxmoxAPI) ReadPool(_ context.Context, _ string) (*PoolInfo, error) {
+	return nil, fmt.Errorf("proxmox: ReadPool not yet implemented")
+}
+
+func (r *realProxmoxAPI) UpdatePool(_ context.Context, _, _ string) error {
+	return fmt.Errorf("proxmox: UpdatePool not yet implemented")
+}
+
+func (r *realProxmoxAPI) DeletePool(_ context.Context, _ string) error {
+	return fmt.Errorf("proxmox: DeletePool not yet implemented")
+}
+
+// ── Backup jobs (stub) ──────────────────────────────────────────────────────
+
+func (r *realProxmoxAPI) CreateBackupJob(_ context.Context, _ BackupJobInfo) (string, error) {
+	return "", fmt.Errorf("proxmox: CreateBackupJob not yet implemented")
+}
+
+func (r *realProxmoxAPI) ReadBackupJob(_ context.Context, _ string) (*BackupJobInfo, error) {
+	return nil, fmt.Errorf("proxmox: ReadBackupJob not yet implemented")
+}
+
+func (r *realProxmoxAPI) UpdateBackupJob(_ context.Context, _ string, _ BackupJobInfo) error {
+	return fmt.Errorf("proxmox: UpdateBackupJob not yet implemented")
+}
+
+func (r *realProxmoxAPI) DeleteBackupJob(_ context.Context, _ string) error {
+	return fmt.Errorf("proxmox: DeleteBackupJob not yet implemented")
+}
+
+// ── SDN (stub) ──────────────────────────────────────────────────────────────
+
+func (r *realProxmoxAPI) CreateSDNZone(_ context.Context, _ SDNZoneInfo) error {
+	return fmt.Errorf("proxmox: CreateSDNZone not yet implemented")
+}
+func (r *realProxmoxAPI) ReadSDNZone(_ context.Context, _ string) (*SDNZoneInfo, error) {
+	return nil, fmt.Errorf("proxmox: ReadSDNZone not yet implemented")
+}
+func (r *realProxmoxAPI) UpdateSDNZone(_ context.Context, _ string, _ SDNZoneInfo) error {
+	return fmt.Errorf("proxmox: UpdateSDNZone not yet implemented")
+}
+func (r *realProxmoxAPI) DeleteSDNZone(_ context.Context, _ string) error {
+	return fmt.Errorf("proxmox: DeleteSDNZone not yet implemented")
+}
+func (r *realProxmoxAPI) CreateSDNVnet(_ context.Context, _ SDNVnetInfo) error {
+	return fmt.Errorf("proxmox: CreateSDNVnet not yet implemented")
+}
+func (r *realProxmoxAPI) ReadSDNVnet(_ context.Context, _ string) (*SDNVnetInfo, error) {
+	return nil, fmt.Errorf("proxmox: ReadSDNVnet not yet implemented")
+}
+func (r *realProxmoxAPI) UpdateSDNVnet(_ context.Context, _ string, _ SDNVnetInfo) error {
+	return fmt.Errorf("proxmox: UpdateSDNVnet not yet implemented")
+}
+func (r *realProxmoxAPI) DeleteSDNVnet(_ context.Context, _ string) error {
+	return fmt.Errorf("proxmox: DeleteSDNVnet not yet implemented")
+}
+func (r *realProxmoxAPI) CreateSDNSubnet(_ context.Context, _ string, _ SDNSubnetInfo) error {
+	return fmt.Errorf("proxmox: CreateSDNSubnet not yet implemented")
+}
+func (r *realProxmoxAPI) ReadSDNSubnet(_ context.Context, _, _ string) (*SDNSubnetInfo, error) {
+	return nil, fmt.Errorf("proxmox: ReadSDNSubnet not yet implemented")
+}
+func (r *realProxmoxAPI) UpdateSDNSubnet(_ context.Context, _, _ string, _ SDNSubnetInfo) error {
+	return fmt.Errorf("proxmox: UpdateSDNSubnet not yet implemented")
+}
+func (r *realProxmoxAPI) DeleteSDNSubnet(_ context.Context, _, _ string) error {
+	return fmt.Errorf("proxmox: DeleteSDNSubnet not yet implemented")
+}
+
+// ── HA (stub) ───────────────────────────────────────────────────────────────
+
+func (r *realProxmoxAPI) CreateHAGroup(_ context.Context, _ HAGroupInfo) error {
+	return fmt.Errorf("proxmox: CreateHAGroup not yet implemented")
+}
+func (r *realProxmoxAPI) ReadHAGroup(_ context.Context, _ string) (*HAGroupInfo, error) {
+	return nil, fmt.Errorf("proxmox: ReadHAGroup not yet implemented")
+}
+func (r *realProxmoxAPI) UpdateHAGroup(_ context.Context, _ string, _ HAGroupInfo) error {
+	return fmt.Errorf("proxmox: UpdateHAGroup not yet implemented")
+}
+func (r *realProxmoxAPI) DeleteHAGroup(_ context.Context, _ string) error {
+	return fmt.Errorf("proxmox: DeleteHAGroup not yet implemented")
+}
+func (r *realProxmoxAPI) CreateHAResource(_ context.Context, _ HAResourceInfo) error {
+	return fmt.Errorf("proxmox: CreateHAResource not yet implemented")
+}
+func (r *realProxmoxAPI) ReadHAResource(_ context.Context, _ string) (*HAResourceInfo, error) {
+	return nil, fmt.Errorf("proxmox: ReadHAResource not yet implemented")
+}
+func (r *realProxmoxAPI) UpdateHAResource(_ context.Context, _ string, _ HAResourceInfo) error {
+	return fmt.Errorf("proxmox: UpdateHAResource not yet implemented")
+}
+func (r *realProxmoxAPI) DeleteHAResource(_ context.Context, _ string) error {
+	return fmt.Errorf("proxmox: DeleteHAResource not yet implemented")
+}
+
+// ── ACME (stub) ─────────────────────────────────────────────────────────────
+
+func (r *realProxmoxAPI) CreateACMEAccount(_ context.Context, _ ACMEAccountInfo) error {
+	return fmt.Errorf("proxmox: CreateACMEAccount not yet implemented")
+}
+func (r *realProxmoxAPI) ReadACMEAccount(_ context.Context, _ string) (*ACMEAccountInfo, error) {
+	return nil, fmt.Errorf("proxmox: ReadACMEAccount not yet implemented")
+}
+func (r *realProxmoxAPI) DeleteACMEAccount(_ context.Context, _ string) error {
+	return fmt.Errorf("proxmox: DeleteACMEAccount not yet implemented")
+}
+
+// ── Users/Roles/ACLs (stub) ─────────────────────────────────────────────────
+
+func (r *realProxmoxAPI) CreateUser(_ context.Context, _ PVEUserInfo) error {
+	return fmt.Errorf("proxmox: CreateUser not yet implemented")
+}
+func (r *realProxmoxAPI) ReadUser(_ context.Context, _ string) (*PVEUserInfo, error) {
+	return nil, fmt.Errorf("proxmox: ReadUser not yet implemented")
+}
+func (r *realProxmoxAPI) UpdateUser(_ context.Context, _ string, _ PVEUserInfo) error {
+	return fmt.Errorf("proxmox: UpdateUser not yet implemented")
+}
+func (r *realProxmoxAPI) DeleteUser(_ context.Context, _ string) error {
+	return fmt.Errorf("proxmox: DeleteUser not yet implemented")
+}
+func (r *realProxmoxAPI) CreateRole(_ context.Context, _ PVERoleInfo) error {
+	return fmt.Errorf("proxmox: CreateRole not yet implemented")
+}
+func (r *realProxmoxAPI) ReadRole(_ context.Context, _ string) (*PVERoleInfo, error) {
+	return nil, fmt.Errorf("proxmox: ReadRole not yet implemented")
+}
+func (r *realProxmoxAPI) UpdateRole(_ context.Context, _ string, _ PVERoleInfo) error {
+	return fmt.Errorf("proxmox: UpdateRole not yet implemented")
+}
+func (r *realProxmoxAPI) DeleteRole(_ context.Context, _ string) error {
+	return fmt.Errorf("proxmox: DeleteRole not yet implemented")
+}
+func (r *realProxmoxAPI) SetACL(_ context.Context, _ PVEACLInfo) error {
+	return fmt.Errorf("proxmox: SetACL not yet implemented")
+}
+func (r *realProxmoxAPI) ReadACL(_ context.Context, _ string) (*PVEACLInfo, error) {
+	return nil, fmt.Errorf("proxmox: ReadACL not yet implemented")
+}
+func (r *realProxmoxAPI) DeleteACL(_ context.Context, _ string) error {
+	return fmt.Errorf("proxmox: DeleteACL not yet implemented")
+}
+
+// ── Cluster options (stub) ──────────────────────────────────────────────────
+
+func (r *realProxmoxAPI) ReadClusterOptions(_ context.Context) (*ClusterOptionsInfo, error) {
+	return nil, fmt.Errorf("proxmox: ReadClusterOptions not yet implemented")
+}
+func (r *realProxmoxAPI) UpdateClusterOptions(_ context.Context, _ ClusterOptionsInfo) error {
+	return fmt.Errorf("proxmox: UpdateClusterOptions not yet implemented")
+}

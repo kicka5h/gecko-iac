@@ -38,6 +38,62 @@ type mockProxmoxAPI struct {
 	updateNetwork func(ctx context.Context, iface string, cfg NetworkConfig) error
 	deleteNetwork func(ctx context.Context, iface string) error
 	reloadNetwork func(ctx context.Context) error
+
+	createFirewallRule func(ctx context.Context, scope string, rule FirewallRuleInfo) (int, error)
+	readFirewallRule   func(ctx context.Context, scope string, pos int) (*FirewallRuleInfo, error)
+	updateFirewallRule func(ctx context.Context, scope string, pos int, rule FirewallRuleInfo) error
+	deleteFirewallRule func(ctx context.Context, scope string, pos int) error
+
+	createSnapshot func(ctx context.Context, vmid int, name, description string, vmstate bool) error
+	readSnapshot   func(ctx context.Context, vmid int, name string) (*SnapshotInfo, error)
+	deleteSnapshot func(ctx context.Context, vmid int, name string) error
+
+	createPool func(ctx context.Context, poolid, comment string) error
+	readPool   func(ctx context.Context, poolid string) (*PoolInfo, error)
+	updatePool func(ctx context.Context, poolid, comment string) error
+	deletePool func(ctx context.Context, poolid string) error
+
+	createBackupJob func(ctx context.Context, job BackupJobInfo) (string, error)
+	readBackupJob   func(ctx context.Context, id string) (*BackupJobInfo, error)
+	updateBackupJob func(ctx context.Context, id string, job BackupJobInfo) error
+	deleteBackupJob func(ctx context.Context, id string) error
+
+	createSDNZone func(ctx context.Context, zone SDNZoneInfo) error
+	readSDNZone   func(ctx context.Context, zone string) (*SDNZoneInfo, error)
+	updateSDNZone func(ctx context.Context, zone string, info SDNZoneInfo) error
+	deleteSDNZone func(ctx context.Context, zone string) error
+	createSDNVnet func(ctx context.Context, vnet SDNVnetInfo) error
+	readSDNVnet   func(ctx context.Context, vnet string) (*SDNVnetInfo, error)
+	updateSDNVnet func(ctx context.Context, vnet string, info SDNVnetInfo) error
+	deleteSDNVnet func(ctx context.Context, vnet string) error
+	createSDNSubnet func(ctx context.Context, vnet string, subnet SDNSubnetInfo) error
+	readSDNSubnet   func(ctx context.Context, vnet, subnet string) (*SDNSubnetInfo, error)
+	updateSDNSubnet func(ctx context.Context, vnet, subnet string, info SDNSubnetInfo) error
+	deleteSDNSubnet func(ctx context.Context, vnet, subnet string) error
+	createHAGroup func(ctx context.Context, group HAGroupInfo) error
+	readHAGroup   func(ctx context.Context, group string) (*HAGroupInfo, error)
+	updateHAGroup func(ctx context.Context, group string, info HAGroupInfo) error
+	deleteHAGroup func(ctx context.Context, group string) error
+	createHAResource func(ctx context.Context, res HAResourceInfo) error
+	readHAResource   func(ctx context.Context, sid string) (*HAResourceInfo, error)
+	updateHAResource func(ctx context.Context, sid string, info HAResourceInfo) error
+	deleteHAResource func(ctx context.Context, sid string) error
+	createACMEAccount func(ctx context.Context, acct ACMEAccountInfo) error
+	readACMEAccount   func(ctx context.Context, name string) (*ACMEAccountInfo, error)
+	deleteACMEAccount func(ctx context.Context, name string) error
+	createUser func(ctx context.Context, user PVEUserInfo) error
+	readUser   func(ctx context.Context, userid string) (*PVEUserInfo, error)
+	updateUser func(ctx context.Context, userid string, user PVEUserInfo) error
+	deleteUser func(ctx context.Context, userid string) error
+	createRole func(ctx context.Context, role PVERoleInfo) error
+	readRole   func(ctx context.Context, roleid string) (*PVERoleInfo, error)
+	updateRole func(ctx context.Context, roleid string, role PVERoleInfo) error
+	deleteRole func(ctx context.Context, roleid string) error
+	setACL     func(ctx context.Context, acl PVEACLInfo) error
+	readACL    func(ctx context.Context, path string) (*PVEACLInfo, error)
+	deleteACL  func(ctx context.Context, path string) error
+	readClusterOptions   func(ctx context.Context) (*ClusterOptionsInfo, error)
+	updateClusterOptions func(ctx context.Context, opts ClusterOptionsInfo) error
 }
 
 func (m *mockProxmoxAPI) NextVMID(ctx context.Context) (int, error) {
@@ -96,6 +152,98 @@ func (m *mockProxmoxAPI) DeleteNetwork(ctx context.Context, iface string) error 
 	return m.deleteNetwork(ctx, iface)
 }
 func (m *mockProxmoxAPI) ReloadNetwork(ctx context.Context) error { return m.reloadNetwork(ctx) }
+
+func (m *mockProxmoxAPI) CreateFirewallRule(ctx context.Context, scope string, rule FirewallRuleInfo) (int, error) {
+	return m.createFirewallRule(ctx, scope, rule)
+}
+func (m *mockProxmoxAPI) ReadFirewallRule(ctx context.Context, scope string, pos int) (*FirewallRuleInfo, error) {
+	return m.readFirewallRule(ctx, scope, pos)
+}
+func (m *mockProxmoxAPI) UpdateFirewallRule(ctx context.Context, scope string, pos int, rule FirewallRuleInfo) error {
+	return m.updateFirewallRule(ctx, scope, pos, rule)
+}
+func (m *mockProxmoxAPI) DeleteFirewallRule(ctx context.Context, scope string, pos int) error {
+	return m.deleteFirewallRule(ctx, scope, pos)
+}
+func (m *mockProxmoxAPI) CreateSnapshot(ctx context.Context, vmid int, name, description string, vmstate bool) error {
+	return m.createSnapshot(ctx, vmid, name, description, vmstate)
+}
+func (m *mockProxmoxAPI) ReadSnapshot(ctx context.Context, vmid int, name string) (*SnapshotInfo, error) {
+	return m.readSnapshot(ctx, vmid, name)
+}
+func (m *mockProxmoxAPI) DeleteSnapshot(ctx context.Context, vmid int, name string) error {
+	return m.deleteSnapshot(ctx, vmid, name)
+}
+func (m *mockProxmoxAPI) CreatePool(ctx context.Context, poolid, comment string) error {
+	return m.createPool(ctx, poolid, comment)
+}
+func (m *mockProxmoxAPI) ReadPool(ctx context.Context, poolid string) (*PoolInfo, error) {
+	return m.readPool(ctx, poolid)
+}
+func (m *mockProxmoxAPI) UpdatePool(ctx context.Context, poolid, comment string) error {
+	return m.updatePool(ctx, poolid, comment)
+}
+func (m *mockProxmoxAPI) DeletePool(ctx context.Context, poolid string) error {
+	return m.deletePool(ctx, poolid)
+}
+func (m *mockProxmoxAPI) CreateBackupJob(ctx context.Context, job BackupJobInfo) (string, error) {
+	return m.createBackupJob(ctx, job)
+}
+func (m *mockProxmoxAPI) ReadBackupJob(ctx context.Context, id string) (*BackupJobInfo, error) {
+	return m.readBackupJob(ctx, id)
+}
+func (m *mockProxmoxAPI) UpdateBackupJob(ctx context.Context, id string, job BackupJobInfo) error {
+	return m.updateBackupJob(ctx, id, job)
+}
+func (m *mockProxmoxAPI) DeleteBackupJob(ctx context.Context, id string) error {
+	return m.deleteBackupJob(ctx, id)
+}
+
+// SDN
+func (m *mockProxmoxAPI) CreateSDNZone(ctx context.Context, z SDNZoneInfo) error { return m.createSDNZone(ctx, z) }
+func (m *mockProxmoxAPI) ReadSDNZone(ctx context.Context, z string) (*SDNZoneInfo, error) { return m.readSDNZone(ctx, z) }
+func (m *mockProxmoxAPI) UpdateSDNZone(ctx context.Context, z string, i SDNZoneInfo) error { return m.updateSDNZone(ctx, z, i) }
+func (m *mockProxmoxAPI) DeleteSDNZone(ctx context.Context, z string) error { return m.deleteSDNZone(ctx, z) }
+func (m *mockProxmoxAPI) CreateSDNVnet(ctx context.Context, v SDNVnetInfo) error { return m.createSDNVnet(ctx, v) }
+func (m *mockProxmoxAPI) ReadSDNVnet(ctx context.Context, v string) (*SDNVnetInfo, error) { return m.readSDNVnet(ctx, v) }
+func (m *mockProxmoxAPI) UpdateSDNVnet(ctx context.Context, v string, i SDNVnetInfo) error { return m.updateSDNVnet(ctx, v, i) }
+func (m *mockProxmoxAPI) DeleteSDNVnet(ctx context.Context, v string) error { return m.deleteSDNVnet(ctx, v) }
+func (m *mockProxmoxAPI) CreateSDNSubnet(ctx context.Context, v string, s SDNSubnetInfo) error { return m.createSDNSubnet(ctx, v, s) }
+func (m *mockProxmoxAPI) ReadSDNSubnet(ctx context.Context, v, s string) (*SDNSubnetInfo, error) { return m.readSDNSubnet(ctx, v, s) }
+func (m *mockProxmoxAPI) UpdateSDNSubnet(ctx context.Context, v, s string, i SDNSubnetInfo) error { return m.updateSDNSubnet(ctx, v, s, i) }
+func (m *mockProxmoxAPI) DeleteSDNSubnet(ctx context.Context, v, s string) error { return m.deleteSDNSubnet(ctx, v, s) }
+
+// HA
+func (m *mockProxmoxAPI) CreateHAGroup(ctx context.Context, g HAGroupInfo) error { return m.createHAGroup(ctx, g) }
+func (m *mockProxmoxAPI) ReadHAGroup(ctx context.Context, g string) (*HAGroupInfo, error) { return m.readHAGroup(ctx, g) }
+func (m *mockProxmoxAPI) UpdateHAGroup(ctx context.Context, g string, i HAGroupInfo) error { return m.updateHAGroup(ctx, g, i) }
+func (m *mockProxmoxAPI) DeleteHAGroup(ctx context.Context, g string) error { return m.deleteHAGroup(ctx, g) }
+func (m *mockProxmoxAPI) CreateHAResource(ctx context.Context, r HAResourceInfo) error { return m.createHAResource(ctx, r) }
+func (m *mockProxmoxAPI) ReadHAResource(ctx context.Context, s string) (*HAResourceInfo, error) { return m.readHAResource(ctx, s) }
+func (m *mockProxmoxAPI) UpdateHAResource(ctx context.Context, s string, i HAResourceInfo) error { return m.updateHAResource(ctx, s, i) }
+func (m *mockProxmoxAPI) DeleteHAResource(ctx context.Context, s string) error { return m.deleteHAResource(ctx, s) }
+
+// ACME
+func (m *mockProxmoxAPI) CreateACMEAccount(ctx context.Context, a ACMEAccountInfo) error { return m.createACMEAccount(ctx, a) }
+func (m *mockProxmoxAPI) ReadACMEAccount(ctx context.Context, n string) (*ACMEAccountInfo, error) { return m.readACMEAccount(ctx, n) }
+func (m *mockProxmoxAPI) DeleteACMEAccount(ctx context.Context, n string) error { return m.deleteACMEAccount(ctx, n) }
+
+// Users/Roles/ACLs
+func (m *mockProxmoxAPI) CreateUser(ctx context.Context, u PVEUserInfo) error { return m.createUser(ctx, u) }
+func (m *mockProxmoxAPI) ReadUser(ctx context.Context, u string) (*PVEUserInfo, error) { return m.readUser(ctx, u) }
+func (m *mockProxmoxAPI) UpdateUser(ctx context.Context, u string, i PVEUserInfo) error { return m.updateUser(ctx, u, i) }
+func (m *mockProxmoxAPI) DeleteUser(ctx context.Context, u string) error { return m.deleteUser(ctx, u) }
+func (m *mockProxmoxAPI) CreateRole(ctx context.Context, r PVERoleInfo) error { return m.createRole(ctx, r) }
+func (m *mockProxmoxAPI) ReadRole(ctx context.Context, r string) (*PVERoleInfo, error) { return m.readRole(ctx, r) }
+func (m *mockProxmoxAPI) UpdateRole(ctx context.Context, r string, i PVERoleInfo) error { return m.updateRole(ctx, r, i) }
+func (m *mockProxmoxAPI) DeleteRole(ctx context.Context, r string) error { return m.deleteRole(ctx, r) }
+func (m *mockProxmoxAPI) SetACL(ctx context.Context, a PVEACLInfo) error { return m.setACL(ctx, a) }
+func (m *mockProxmoxAPI) ReadACL(ctx context.Context, p string) (*PVEACLInfo, error) { return m.readACL(ctx, p) }
+func (m *mockProxmoxAPI) DeleteACL(ctx context.Context, p string) error { return m.deleteACL(ctx, p) }
+
+// Cluster
+func (m *mockProxmoxAPI) ReadClusterOptions(ctx context.Context) (*ClusterOptionsInfo, error) { return m.readClusterOptions(ctx) }
+func (m *mockProxmoxAPI) UpdateClusterOptions(ctx context.Context, o ClusterOptionsInfo) error { return m.updateClusterOptions(ctx, o) }
 
 // newTestProvider returns a ProxmoxProvider with the given mock injected.
 func newTestProvider(mock *mockProxmoxAPI) *ProxmoxProvider {
