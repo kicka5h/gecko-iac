@@ -1,0 +1,48 @@
+name: Mirror to Gitea
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["**"]
+  delete:
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Add Gitea remote
+        run: git remote add gitea https://${{ secrets.GITEA_USERNAME }}:${{ secrets.GITEA_TOKEN }}@gitea.com/kicka5h/gecko-iac.git
+
+      - name: Fetch Gitea state
+        run: git fetch gitea main --quiet 2>/dev/null || echo "Gitea main not found (first mirror)"
+
+      - name: Diff check (GitHub main vs Gitea main)
+        run: |
+          if git rev-parse gitea/main >/dev/null 2>&1; then
+            BEHIND=$(git rev-list --count gitea/main..origin/main)
+            AHEAD=$(git rev-list --count origin/main..gitea/main)
+            if [ "$BEHIND" -eq 0 ] && [ "$AHEAD" -eq 0 ]; then
+              echo "✓ Gitea main is in sync with GitHub main"
+            else
+              echo "⚠ Gitea main is out of sync:"
+              echo "  GitHub is $BEHIND commit(s) ahead of Gitea"
+              echo "  Gitea is $AHEAD commit(s) ahead of GitHub (will be overwritten)"
+              echo ""
+              echo "Commits to push:"
+              git log --oneline gitea/main..origin/main || true
+              echo ""
+              echo "Commits on Gitea not on GitHub (will be lost):"
+              git log --oneline origin/main..gitea/main || true
+            fi
+          else
+            echo "→ First mirror — no Gitea main to compare"
+          fi
+
+      - name: Push to Gitea
+        run: |
+          git push gitea --all --force
+          git push gitea --tags --force
