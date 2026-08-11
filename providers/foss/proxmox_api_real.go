@@ -785,14 +785,73 @@ func (r *realProxmoxAPI) ReadPool(ctx context.Context, poolid string) (*PoolInfo
 		}
 		return nil, fmt.Errorf("proxmox: read pool %q: %w", poolid, err)
 	}
-	return &PoolInfo{PoolID: poolid, Comment: pool.Comment}, nil
+	return &PoolInfo{PoolID: poolid, Comment: pool.Comment, Members: poolMemberIDs(pool.Members)}, nil
 }
 
-func (r *realProxmoxAPI) UpdatePool(ctx context.Context, poolid, comment string) error {
+// poolMemberIDs extracts guest VMIDs from pool members, sorted ascending.
+func poolMemberIDs(members []proxmox.ClusterResource) string {
+	var ids []int
+	for _, m := range members {
+		if m.Type == "qemu" || m.Type == "lxc" {
+			ids = append(ids, int(m.VMID))
+		}
+	}
+	sort.Ints(ids)
+	strs := make([]string, len(ids))
+	for i, id := range ids {
+		strs[i] = strconv.Itoa(id)
+	}
+	return strings.Join(strs, ",")
+}
+
+func (r *realProxmoxAPI) UpdatePool(ctx context.Context, poolid, comment, members string) error {
 	// Raw PUT so an empty comment actually clears the field.
 	body := map[string]string{"comment": comment}
 	if err := r.client.Put(ctx, "/pools/"+url.PathEscape(poolid), body, nil); err != nil {
 		return fmt.Errorf("proxmox: update pool %q: %w", poolid, err)
+	}
+	if members == "" {
+		// Empty means unmanaged: leave existing membership alone.
+		return nil
+	}
+	// PVE membership is add/remove, not declarative; reconcile against the
+	// current member list.
+	pool, err := r.client.Pool(ctx, poolid)
+	if err != nil {
+		return fmt.Errorf("proxmox: read pool %q for member reconcile: %w", poolid, err)
+	}
+	currentSet := map[string]bool{}
+	for _, id := range splitCommaList(poolMemberIDs(pool.Members)) {
+		currentSet[id] = true
+	}
+	desiredSet := map[string]bool{}
+	for _, id := range splitCommaList(members) {
+		desiredSet[id] = true
+	}
+	var toAdd, toRemove []string
+	for id := range desiredSet {
+		if !currentSet[id] {
+			toAdd = append(toAdd, id)
+		}
+	}
+	for id := range currentSet {
+		if !desiredSet[id] {
+			toRemove = append(toRemove, id)
+		}
+	}
+	sort.Strings(toAdd)
+	sort.Strings(toRemove)
+	if len(toAdd) > 0 {
+		body := map[string]interface{}{"vms": strings.Join(toAdd, ",")}
+		if err := r.client.Put(ctx, "/pools/"+url.PathEscape(poolid), body, nil); err != nil {
+			return fmt.Errorf("proxmox: add members to pool %q: %w", poolid, err)
+		}
+	}
+	if len(toRemove) > 0 {
+		body := map[string]interface{}{"vms": strings.Join(toRemove, ","), "delete": 1}
+		if err := r.client.Put(ctx, "/pools/"+url.PathEscape(poolid), body, nil); err != nil {
+			return fmt.Errorf("proxmox: remove members from pool %q: %w", poolid, err)
+		}
 	}
 	return nil
 }
@@ -1405,6 +1464,7 @@ func (r *realProxmoxAPI) DeleteACMEAccount(ctx context.Context, name string) err
 func (r *realProxmoxAPI) CreateUser(ctx context.Context, user PVEUserInfo) error {
 	nu := &proxmox.NewUser{
 		UserID:    user.UserID,
+		Password:  user.Password,
 		Comment:   user.Comment,
 		Email:     user.Email,
 		Enable:    user.Enable,

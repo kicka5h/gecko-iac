@@ -274,7 +274,7 @@ func TestProxmoxReadPool_NotFound_ReturnsNil(t *testing.T) {
 func TestProxmoxUpdatePool_SendsComment(t *testing.T) {
 	var gotComment string
 	p := newTestProvider(&mockProxmoxAPI{
-		updatePool: func(_ context.Context, _, comment string) error {
+		updatePool: func(_ context.Context, _, comment, _ string) error {
 			gotComment = comment
 			return nil
 		},
@@ -293,6 +293,42 @@ func TestProxmoxUpdatePool_SendsComment(t *testing.T) {
 	}
 	if state.Inputs["comment"] != "updated" {
 		t.Errorf("state not refreshed: %+v", state.Inputs)
+	}
+}
+
+func TestProxmoxCreatePool_WithMembers_AssignsAfterCreate(t *testing.T) {
+	var gotMembers string
+	p := newTestProvider(&mockProxmoxAPI{
+		createPool: func(_ context.Context, _, _ string) error { return nil },
+		updatePool: func(_ context.Context, _, _, members string) error {
+			gotMembers = members
+			return nil
+		},
+	})
+	_, err := p.Create(context.Background(), core.ResourceArgs{
+		Type: "proxmox:pool", Name: "prod",
+		Inputs: core.Inputs{"members": "100,101"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotMembers != "100,101" {
+		t.Errorf("want members 100,101 assigned after create, got %q", gotMembers)
+	}
+}
+
+func TestProxmoxReadPool_MapsMembers(t *testing.T) {
+	p := newTestProvider(&mockProxmoxAPI{
+		readPool: func(_ context.Context, poolid string) (*PoolInfo, error) {
+			return &PoolInfo{PoolID: poolid, Members: "100,101"}, nil
+		},
+	})
+	state, err := p.Read(context.Background(), "proxmox:pool::prod", "prod")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if state.Inputs["members"] != "100,101" {
+		t.Errorf("want members mapped, got %v", state.Inputs["members"])
 	}
 }
 
@@ -532,6 +568,26 @@ func TestProxmoxCreateUser_MapsFields(t *testing.T) {
 	}
 	if state.ExternalID != "deploy@pve" {
 		t.Errorf("want externalID deploy@pve, got %q", state.ExternalID)
+	}
+}
+
+func TestProxmoxCreateUser_PassesPassword(t *testing.T) {
+	var got PVEUserInfo
+	p := newTestProvider(&mockProxmoxAPI{
+		createUser: func(_ context.Context, user PVEUserInfo) error {
+			got = user
+			return nil
+		},
+	})
+	_, err := p.Create(context.Background(), core.ResourceArgs{
+		Type: "proxmox:user", Name: "deploy",
+		Inputs: core.Inputs{"userid": "deploy@pve", "password": "s3cret", "enable": true},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Password != "s3cret" {
+		t.Errorf("want password passed through on create, got %q", got.Password)
 	}
 }
 

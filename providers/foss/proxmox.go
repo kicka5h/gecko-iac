@@ -55,7 +55,7 @@ type proxmoxAPI interface {
 
 	CreatePool(ctx context.Context, poolid, comment string) error
 	ReadPool(ctx context.Context, poolid string) (*PoolInfo, error)
-	UpdatePool(ctx context.Context, poolid, comment string) error
+	UpdatePool(ctx context.Context, poolid, comment, members string) error
 	DeletePool(ctx context.Context, poolid string) error
 
 	CreateBackupJob(ctx context.Context, job BackupJobInfo) (string, error)
@@ -280,6 +280,7 @@ type SnapshotInfo struct {
 type PoolInfo struct {
 	PoolID  string
 	Comment string
+	Members string // comma-separated VM/CT IDs; "" means unmanaged
 }
 
 // BackupJobInfo holds a Proxmox backup job configuration.
@@ -355,6 +356,7 @@ type ACMEAccountInfo struct {
 // PVEUserInfo holds a Proxmox user.
 type PVEUserInfo struct {
 	UserID    string // e.g. "user@pam"
+	Password  string // write-only: used on create, never read back
 	Email     string
 	FirstName string
 	LastName  string
@@ -765,7 +767,9 @@ func (p *ProxmoxProvider) Diff(ctx context.Context, current *core.ResourceState,
 			changes = append(changes, compareField(f, current.Inputs, desired.Inputs)...)
 		}
 	case "proxmox:pool":
-		changes = append(changes, compareField("comment", current.Inputs, desired.Inputs)...)
+		for _, f := range []string{"comment", "members"} {
+			changes = append(changes, compareField(f, current.Inputs, desired.Inputs)...)
+		}
 	case "proxmox:backup":
 		for _, f := range []string{
 			"vmid", "storage", "mode", "compress",
@@ -1778,6 +1782,13 @@ func (p *ProxmoxProvider) createPool(ctx context.Context, args core.ResourceArgs
 		return nil, fmt.Errorf("proxmox: create pool %q: %w", poolid, err)
 	}
 
+	// Pool creation cannot set members; assign them in a follow-up update.
+	if members, _ := args.Inputs["members"].(string); members != "" {
+		if err := p.api.UpdatePool(ctx, poolid, comment, members); err != nil {
+			return nil, fmt.Errorf("proxmox: assign members to pool %q: %w", poolid, err)
+		}
+	}
+
 	return &core.ResourceState{
 		ID:         proxmoxResourceID(args),
 		Type:       args.Type,
@@ -1805,6 +1816,9 @@ func (p *ProxmoxProvider) readPool(ctx context.Context, id core.ResourceID, exte
 	if info.Comment != "" {
 		inputs["comment"] = info.Comment
 	}
+	if info.Members != "" {
+		inputs["members"] = info.Members
+	}
 
 	return &core.ResourceState{
 		ID:         id,
@@ -1820,7 +1834,8 @@ func (p *ProxmoxProvider) readPool(ctx context.Context, id core.ResourceID, exte
 
 func (p *ProxmoxProvider) updatePool(ctx context.Context, current *core.ResourceState, desired core.ResourceArgs) (*core.ResourceState, error) {
 	comment, _ := desired.Inputs["comment"].(string)
-	if err := p.api.UpdatePool(ctx, current.ExternalID, comment); err != nil {
+	members, _ := desired.Inputs["members"].(string)
+	if err := p.api.UpdatePool(ctx, current.ExternalID, comment, members); err != nil {
 		return nil, err
 	}
 	return p.readPool(ctx, proxmoxResourceID(desired), current.ExternalID)
@@ -2125,7 +2140,7 @@ func pveUserFromInputs(inputs core.Inputs) PVEUserInfo {
 	gs := func(k string) string { v, _ := inputs[k].(string); return v }
 	gb := func(k string) bool { v, _ := inputs[k].(bool); return v }
 	gi := func(k string) int { v, _ := toInt(inputs[k]); return v }
-	return PVEUserInfo{UserID: gs("userid"), Email: gs("email"), FirstName: gs("firstname"), LastName: gs("lastname"), Groups: gs("groups"), Enable: gb("enable"), Expire: gi("expire"), Comment: gs("comment")}
+	return PVEUserInfo{UserID: gs("userid"), Password: gs("password"), Email: gs("email"), FirstName: gs("firstname"), LastName: gs("lastname"), Groups: gs("groups"), Enable: gb("enable"), Expire: gi("expire"), Comment: gs("comment")}
 }
 
 func pveUserToInputs(info *PVEUserInfo) core.Inputs {
