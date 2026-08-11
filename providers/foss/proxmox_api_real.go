@@ -1008,17 +1008,8 @@ type sdnZonePayload struct {
 }
 
 func sdnZonePayloadFrom(zone SDNZoneInfo) sdnZonePayload {
-	return sdnZonePayload{
-		Zone:       zone.Zone,
-		Type:       zone.Type,
-		Bridge:     zone.Bridge,
-		MTU:        zone.MTU,
-		Nodes:      zone.Nodes,
-		DNS:        zone.DNS,
-		ReverseDNS: zone.ReverseDNS,
-		DNSZone:    zone.DNSZone,
-		IPAM:       zone.IPAM,
-	}
+	// Field-identical structs; direct conversion keeps them in lockstep.
+	return sdnZonePayload(zone)
 }
 
 func (r *realProxmoxAPI) CreateSDNZone(ctx context.Context, zone SDNZoneInfo) error {
