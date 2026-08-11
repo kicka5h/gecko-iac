@@ -186,6 +186,26 @@ func LookupIdent(ident string) TokenType {
 	return IDENT
 }
 
+// keywordTokenTypes is the set of token types produced by the keywords table.
+var keywordTokenTypes = func() map[TokenType]bool {
+	m := make(map[TokenType]bool, len(keywords))
+	for _, tt := range keywords {
+		m[tt] = true
+	}
+	return m
+}()
+
+// fieldKeyable reports whether a keyword token may double as a field key
+// (e.g. "export:" or "from:" as attribute names inside a block). Literals
+// and the block terminator keep their structural meaning.
+func fieldKeyable(tt TokenType) bool {
+	switch tt {
+	case END, BOOL, NULL:
+		return false
+	}
+	return keywordTokenTypes[tt]
+}
+
 // Token is a lexical unit with position info
 type Token struct {
 	Type    TokenType

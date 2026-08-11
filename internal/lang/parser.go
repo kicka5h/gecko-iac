@@ -71,6 +71,21 @@ func (p *Parser) check(tt TokenType) bool {
 	return p.cur().Type == tt
 }
 
+// checkFieldKey reports whether the current token can start a "key: value"
+// field. Plain identifiers always can; keyword-shaped names ("export",
+// "from", ...) count only when immediately followed by ':' so structural
+// keywords keep their meaning (#79).
+func (p *Parser) checkFieldKey() bool {
+	t := p.cur() // note: cur() leaves p.pos on the token itself
+	if t.Type == IDENT {
+		return true
+	}
+	if !fieldKeyable(t.Type) {
+		return false
+	}
+	return p.pos+1 < len(p.tokens) && p.tokens[p.pos+1].Type == COLON
+}
+
 func (p *Parser) match(types ...TokenType) bool {
 	for _, tt := range types {
 		if p.cur().Type == tt {
@@ -216,17 +231,20 @@ func (p *Parser) parseSpawn(protected bool) *SpawnBlock {
 			p.expect(COLON)
 			dep := p.parseExpr()
 			b.Needs = append(b.Needs, dep)
-		case IDENT:
-			// Check for key: value or key: \n ... end (sub-block)
-			f := p.parseField()
-			if f != nil {
-				b.Fields = append(b.Fields, f)
-			}
 		case NEWLINE:
 			p.advance()
 		default:
-			p.errorf(t, "unexpected %q inside spawn block", t.Literal)
-			p.advance()
+			// key: value or key: \n ... end (sub-block); keyword-shaped
+			// keys like "export:" are allowed here too
+			if p.checkFieldKey() {
+				f := p.parseField()
+				if f != nil {
+					b.Fields = append(b.Fields, f)
+				}
+			} else {
+				p.errorf(t, "unexpected %q inside spawn block", t.Literal)
+				p.advance()
+			}
 		}
 		p.skipNL()
 	}
@@ -317,7 +335,7 @@ func (p *Parser) parseFieldsUntilEnd() []*Field {
 	var fields []*Field
 	p.skipNL()
 	for !p.check(END) && !p.check(EOF) {
-		if p.check(IDENT) {
+		if p.checkFieldKey() {
 			f := p.parseField()
 			if f != nil {
 				fields = append(fields, f)
@@ -348,11 +366,11 @@ func (p *Parser) parseField() *Field {
 	if p.curRaw().Type == NEWLINE {
 		// Peek ahead — if the next content is a field assignment, treat as sub-block
 		p.skipNL()
-		if p.check(IDENT) || p.check(END) {
+		if p.checkFieldKey() || p.check(END) {
 			// Sub-block
 			sub := &SubBlock{Pos: p.posOf(tok)}
 			for !p.check(END) && !p.check(EOF) {
-				if p.check(IDENT) {
+				if p.checkFieldKey() {
 					sf := p.parseField()
 					if sf != nil {
 						sub.Fields = append(sub.Fields, sf)
