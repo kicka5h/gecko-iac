@@ -12,7 +12,6 @@ import (
 	"github.com/gecko-iac/gecko/internal/core"
 	"github.com/gecko-iac/gecko/internal/lang"
 	"github.com/gecko-iac/gecko/internal/ui"
-	fossprovider "github.com/gecko-iac/gecko/providers/foss"
 )
 
 var gripCmd = &Command{
@@ -63,71 +62,11 @@ func runGrip(args []string, flags map[string]string) error {
 	// 2. Configure providers
 	spin = ui.NewSpinner("Configuring providers")
 	spin.Start()
-	for _, hint := range loaded.ProviderHints {
-		lname := strings.ToLower(hint.Name)
-		switch lname {
-		case "proxmox":
-			p := fossprovider.NewProxmoxProvider(hint.Config)
-			if err := p.Configure(ctx, hint.Config); err != nil {
-				spin.Stop(false)
-				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
-				spin = ui.NewSpinner("Configuring providers")
-				spin.Start()
-			}
-			loaded.Stack.RegisterProvider(p)
-		case "fly":
-			p := fossprovider.NewFlyProvider(hint.Config)
-			if err := p.Configure(ctx, hint.Config); err != nil {
-				spin.Stop(false)
-				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
-				spin = ui.NewSpinner("Configuring providers")
-				spin.Start()
-			}
-			loaded.Stack.RegisterProvider(p)
-		case "openstack":
-			p := fossprovider.NewOpenStackProvider(hint.Config)
-			if err := p.Configure(ctx, hint.Config); err != nil {
-				spin.Stop(false)
-				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
-				spin = ui.NewSpinner("Configuring providers")
-				spin.Start()
-			}
-			loaded.Stack.RegisterProvider(p)
-		case "hostinger":
-			p := fossprovider.NewHostingerProvider(hint.Config)
-			if err := p.Configure(ctx, hint.Config); err != nil {
-				spin.Stop(false)
-				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
-				spin = ui.NewSpinner("Configuring providers")
-				spin.Start()
-			}
-			loaded.Stack.RegisterProvider(p)
-		case "ubicloud":
-			p := fossprovider.NewUbicloudProvider(hint.Config)
-			if err := p.Configure(ctx, hint.Config); err != nil {
-				spin.Stop(false)
-				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
-				spin = ui.NewSpinner("Configuring providers")
-				spin.Start()
-			}
-			loaded.Stack.RegisterProvider(p)
-		case "opennebula":
-			p := fossprovider.NewOpenNebulaProvider(hint.Config)
-			if err := p.Configure(ctx, hint.Config); err != nil {
-				spin.Stop(false)
-				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
-				spin = ui.NewSpinner("Configuring providers")
-				spin.Start()
-			}
-			loaded.Stack.RegisterProvider(p)
-		default:
-			spin.Stop(true)
-			ui.Warn(fmt.Sprintf("Unknown provider %q — skipping", hint.Name))
-			spin = ui.NewSpinner("Configuring providers")
-			spin.Start()
-		}
-	}
+	warnings := registerProviders(ctx, loaded)
 	spin.Stop(true)
+	for _, w := range warnings {
+		ui.Warn(w)
+	}
 
 	// 3. Load state backend
 	spin = ui.NewSpinner("Loading current state")
