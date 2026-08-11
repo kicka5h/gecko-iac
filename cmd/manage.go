@@ -1,9 +1,13 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
+	"sort"
 	"time"
 
+	"github.com/gecko-iac/gecko/internal/core"
+	"github.com/gecko-iac/gecko/internal/lang"
 	"github.com/gecko-iac/gecko/internal/ui"
 )
 
@@ -195,6 +199,7 @@ You will still need to add the resource declaration to your stack file.`,
 }
 
 func runBurrow(args []string, flags map[string]string) error {
+	ctx := context.Background()
 	ui.PrintBannerSmall("burrow")
 
 	if len(args) < 2 {
@@ -204,31 +209,105 @@ func runBurrow(args []string, flags map[string]string) error {
 		return fmt.Errorf("resource-type and external-id required")
 	}
 
-	resourceType := args[0]
+	resourceType := core.ResourceType(args[0])
 	externalID := args[1]
-	name := flagVal(flags, "name", externalID)
+	name := flagVal(flags, "name", "")
+	workspace := flagVal(flags, "workspace", "dev")
 	dryRun := flagSet(flags, "dry-run")
 
-	ui.Label("Resource Type", resourceType)
+	if name == "" {
+		ui.Error("--name is required")
+		return fmt.Errorf("--name is required")
+	}
+
+	ui.Label("Resource Type", string(resourceType))
 	ui.Label("External ID", externalID)
 	ui.Label("Local Name", name)
+	ui.Label("Workspace", workspace)
 	if dryRun {
 		ui.Label("Mode", ui.GeckoWarning+"dry-run (no state will be written)"+ui.Reset)
 	}
 	fmt.Println()
 
-	spin := ui.NewSpinner(fmt.Sprintf("Reading %s from provider", externalID))
+	// Load the project so provider credentials come from the stack config.
+	spin := ui.NewSpinner("Loading Scute project")
 	spin.Start()
-	time.Sleep(900 * time.Millisecond)
+	loaded, err := lang.LoadProject(lang.LoadOptions{Workspace: workspace})
+	if err != nil {
+		spin.Stop(false)
+		ui.Error(fmt.Sprintf("Failed to load project: %s", err))
+		return err
+	}
+	warnings := registerProviders(ctx, loaded)
+	spin.Stop(true)
+	for _, w := range warnings {
+		ui.Warn(w)
+	}
+
+	providerName := flagVal(flags, "provider", "")
+	if providerName == "" {
+		providerName = providerNameForResourceType(resourceType)
+	}
+	p, ok := loaded.Stack.GetProvider(providerName)
+	if !ok {
+		ui.Error(fmt.Sprintf("Provider %q is not configured in this project", providerName))
+		ui.Indent("Add a provider block to your stack file so gecko can reach it.")
+		fmt.Println()
+		return fmt.Errorf("provider %q not configured", providerName)
+	}
+
+	supported := false
+	for _, t := range p.SupportedTypes() {
+		if t == resourceType {
+			supported = true
+			break
+		}
+	}
+	if !supported {
+		ui.Error(fmt.Sprintf("Provider %q does not support resource type %q", providerName, resourceType))
+		return fmt.Errorf("unsupported resource type %q", resourceType)
+	}
+
+	spin = ui.NewSpinner(fmt.Sprintf("Reading %s from provider %s", externalID, providerName))
+	spin.Start()
+	imported, err := p.Import(ctx, resourceType, externalID)
+	if err != nil {
+		spin.Stop(false)
+		ui.Error(fmt.Sprintf("Import failed: %s", err))
+		return err
+	}
 	spin.Stop(true)
 
-	// Show what was read
+	if imported == nil {
+		ui.Error(fmt.Sprintf("No %s with external ID %q found at the provider", resourceType, externalID))
+		fmt.Println()
+		return fmt.Errorf("resource not found")
+	}
+
+	// Rebind the discovered state to the requested local identity.
+	id := core.ResourceID(fmt.Sprintf("%s::%s", resourceType, name))
+	imported.ID = id
+	imported.Type = resourceType
+	imported.Name = name
+	if imported.ExternalID == "" {
+		imported.ExternalID = externalID
+	}
+	if imported.CreatedAt.IsZero() {
+		imported.CreatedAt = time.Now()
+	}
+	imported.UpdatedAt = time.Now()
+
 	ui.Header("Discovered Resource State")
-	ui.Label("namespace", "default")
-	ui.Label("replicas", "2")
-	ui.Label("image", "nginx:1.25")
-	ui.Label("service_account", "default")
-	ui.Label("labels", "app=nginx, version=1.25")
+	ui.Label("status", string(imported.Status))
+	ui.Label("external_id", imported.ExternalID)
+	keys := make([]string, 0, len(imported.Inputs))
+	for k := range imported.Inputs {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		ui.Label(k, fmt.Sprintf("%v", imported.Inputs[k]))
+	}
 	fmt.Println()
 
 	if dryRun {
@@ -239,16 +318,44 @@ func runBurrow(args []string, flags map[string]string) error {
 
 	spin = ui.NewSpinner("Writing resource to Gecko state")
 	spin.Start()
-	time.Sleep(400 * time.Millisecond)
+
+	backend, backendType := loadBackend(loaded)
+	stackName := loaded.Stack.Name
+	if lockID, lockErr := backend.Lock(ctx, stackName, workspace); lockErr == nil {
+		defer func() { _ = backend.Unlock(ctx, stackName, workspace, lockID) }()
+	}
+
+	st, err := backend.Load(ctx, stackName, workspace)
+	if err != nil || st == nil {
+		st = &core.StackState{StackName: stackName, Workspace: workspace}
+	}
+	if st.Resources == nil {
+		st.Resources = make(map[core.ResourceID]*core.ResourceState)
+	}
+	if existing, exists := st.Resources[id]; exists {
+		spin.Stop(false)
+		ui.Error(fmt.Sprintf("Resource %s already exists in state (external ID %s)", id, existing.ExternalID))
+		ui.Indent("Choose a different --name or remove the existing resource first.")
+		fmt.Println()
+		return fmt.Errorf("resource %s already in state", id)
+	}
+
+	st.Resources[id] = imported
+	st.UpdatedAt = time.Now()
+	if err := backend.Save(ctx, stackName, workspace, st); err != nil {
+		spin.Stop(false)
+		ui.Error(fmt.Sprintf("Failed to write state: %s", err))
+		return err
+	}
 	spin.Stop(true)
 
 	fmt.Println()
-	fmt.Printf("  %s🕳️  Burrowed in!%s Resource %s%s/%s%s imported.\n\n",
+	fmt.Printf("  %s🕳️  Burrowed in!%s Resource %s%s/%s%s imported into %s state.\n\n",
 		ui.GeckoGreen+ui.Bold, ui.Reset,
-		ui.GeckoTeal, resourceType, name, ui.Reset)
+		ui.GeckoTeal, resourceType, name, ui.Reset, backendType)
 
-	ui.Warn("Remember to add this resource to your stack file to avoid drift.")
-	ui.Indent(fmt.Sprintf("stack.Resource(core.ResourceArgs{Type: %q, Name: %q, ...})", resourceType, name))
+	ui.Warn("Remember to add this resource to your stack file to avoid it being planned for destroy.")
+	ui.Indent(fmt.Sprintf("resource %q %q { ... }", resourceType, name))
 	fmt.Println()
 
 	return nil
