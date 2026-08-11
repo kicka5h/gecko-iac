@@ -13,7 +13,6 @@ import (
 	"github.com/gecko-iac/gecko/internal/lang"
 	"github.com/gecko-iac/gecko/internal/state"
 	"github.com/gecko-iac/gecko/internal/ui"
-	fossprovider "github.com/gecko-iac/gecko/providers/foss"
 )
 
 var crawlCmd = &Command{
@@ -33,6 +32,7 @@ committing. No changes are made during a crawl.`,
 		{Name: "json", Default: "false", Usage: "Output plan as JSON"},
 		{Name: "diff", Default: "true", Usage: "Show field-level diffs"},
 		{Name: "compact", Default: "false", Usage: "Compact output (no field diffs)"},
+		{Name: "refresh", Short: "r", Default: "false", Usage: "Read live state back from providers and report drift before planning"},
 	},
 	Run: runCrawl,
 }
@@ -69,71 +69,11 @@ func runCrawl(args []string, flags map[string]string) error {
 	// 2. Instantiate and configure providers
 	spin = ui.NewSpinner("Configuring providers")
 	spin.Start()
-	for _, hint := range loaded.ProviderHints {
-		lname := strings.ToLower(hint.Name)
-		switch lname {
-		case "proxmox":
-			p := fossprovider.NewProxmoxProvider(hint.Config)
-			if err := p.Configure(ctx, hint.Config); err != nil {
-				spin.Stop(false)
-				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
-				spin = ui.NewSpinner("Configuring providers")
-				spin.Start()
-			}
-			loaded.Stack.RegisterProvider(p)
-		case "fly":
-			p := fossprovider.NewFlyProvider(hint.Config)
-			if err := p.Configure(ctx, hint.Config); err != nil {
-				spin.Stop(false)
-				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
-				spin = ui.NewSpinner("Configuring providers")
-				spin.Start()
-			}
-			loaded.Stack.RegisterProvider(p)
-		case "openstack":
-			p := fossprovider.NewOpenStackProvider(hint.Config)
-			if err := p.Configure(ctx, hint.Config); err != nil {
-				spin.Stop(false)
-				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
-				spin = ui.NewSpinner("Configuring providers")
-				spin.Start()
-			}
-			loaded.Stack.RegisterProvider(p)
-		case "hostinger":
-			p := fossprovider.NewHostingerProvider(hint.Config)
-			if err := p.Configure(ctx, hint.Config); err != nil {
-				spin.Stop(false)
-				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
-				spin = ui.NewSpinner("Configuring providers")
-				spin.Start()
-			}
-			loaded.Stack.RegisterProvider(p)
-		case "ubicloud":
-			p := fossprovider.NewUbicloudProvider(hint.Config)
-			if err := p.Configure(ctx, hint.Config); err != nil {
-				spin.Stop(false)
-				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
-				spin = ui.NewSpinner("Configuring providers")
-				spin.Start()
-			}
-			loaded.Stack.RegisterProvider(p)
-		case "opennebula":
-			p := fossprovider.NewOpenNebulaProvider(hint.Config)
-			if err := p.Configure(ctx, hint.Config); err != nil {
-				spin.Stop(false)
-				ui.Warn(fmt.Sprintf("Provider %q configure warning: %s (continuing)", hint.Name, err))
-				spin = ui.NewSpinner("Configuring providers")
-				spin.Start()
-			}
-			loaded.Stack.RegisterProvider(p)
-		default:
-			spin.Stop(true)
-			ui.Warn(fmt.Sprintf("Unknown provider %q — skipping", hint.Name))
-			spin = ui.NewSpinner("Configuring providers")
-			spin.Start()
-		}
-	}
+	warnings := registerProviders(ctx, loaded)
 	spin.Stop(true)
+	for _, w := range warnings {
+		ui.Warn(w)
+	}
 
 	// 3. Load state backend
 	spin = ui.NewSpinner("Loading current state")
@@ -146,6 +86,60 @@ func runCrawl(args []string, flags map[string]string) error {
 	spin.Start()
 	engine := core.NewEngine(loaded.Stack, stateBackend)
 	spin.Stop(true)
+
+	// 4b. Optionally refresh state from providers and report drift
+	if flagSet(flags, "refresh") {
+		spin = ui.NewSpinner("Refreshing state from providers")
+		spin.Start()
+		refresh, err := engine.Refresh(ctx)
+		if err != nil {
+			spin.Stop(false)
+			ui.Error(fmt.Sprintf("Refresh failed: %s", err))
+			return err
+		}
+		spin.Stop(true)
+
+		if !outputJSON {
+			fmt.Println()
+			if len(refresh.Drifted) == 0 && len(refresh.Errors) == 0 {
+				ui.Info(fmt.Sprintf("No drift detected across %d resource(s) — state matches reality.", refresh.Checked))
+			}
+			if len(refresh.Drifted) > 0 {
+				ui.Header("Drift Detected")
+				fmt.Println()
+				for _, d := range refresh.Drifted {
+					rType, rName := splitResourceID(string(d.ResourceID))
+					resource := rType + "." + rName
+					if d.Missing {
+						fmt.Printf("  %s%s%s %smissing from provider%s\n",
+							ui.BrightWhite+ui.Bold, resource, ui.Reset,
+							ui.GeckoDanger, ui.Reset)
+						continue
+					}
+					fmt.Printf("  %s%s%s\n", ui.BrightWhite+ui.Bold, resource, ui.Reset)
+					for _, fc := range d.Changes {
+						if fc.Kind == core.ChangeDelete {
+							fmt.Printf("     %s%-45s%s %s%v%s → %s(unset)%s\n",
+								ui.GeckoMuted, fc.Field, ui.Reset,
+								ui.GeckoDanger, fc.OldValue, ui.Reset,
+								ui.GeckoWarning+ui.Italic, ui.Reset)
+							continue
+						}
+						fmt.Printf("     %s%-45s%s %s%v%s → %s%v%s\n",
+							ui.GeckoMuted, fc.Field, ui.Reset,
+							ui.GeckoDanger, fc.OldValue, ui.Reset,
+							ui.GeckoSuccess, fc.NewValue, ui.Reset)
+					}
+					fmt.Println()
+				}
+				ui.Info("Drifted resources are marked in state; run 'gecko grip' to reconcile them.")
+			}
+			for _, e := range refresh.Errors {
+				ui.Warn(fmt.Sprintf("refresh: %s", e))
+			}
+			fmt.Println()
+		}
+	}
 
 	spin = ui.NewSpinner("Calculating diffs")
 	spin.Start()

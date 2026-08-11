@@ -452,6 +452,114 @@ func (e *Engine) Apply(ctx context.Context, plan *PlanResult, onProgress func(Re
 	return result, nil
 }
 
+// ─── Refresh / Drift Detection ────────────────────────────────────────────────
+
+// ResourceDrift describes how one resource diverges from recorded state.
+type ResourceDrift struct {
+	ResourceID ResourceID
+	Missing    bool          // resource no longer exists at the provider
+	Changes    []FieldChange // fields whose live values differ from state
+}
+
+// RefreshResult summarizes a read-back reconciliation pass.
+type RefreshResult struct {
+	StackName   string
+	Workspace   string
+	Checked     int
+	Drifted     []ResourceDrift
+	Errors      []string
+	RefreshedAt time.Time
+}
+
+// Refresh reads every resource in state back from its provider, compares the
+// live values against the recorded inputs, marks divergent resources with
+// StatusDrifted, and persists the updated statuses.
+func (e *Engine) Refresh(ctx context.Context) (*RefreshResult, error) {
+	result := &RefreshResult{
+		StackName:   e.stack.Name,
+		Workspace:   e.stack.Workspace,
+		RefreshedAt: time.Now(),
+	}
+
+	currentState, err := e.stateBackend.Load(ctx, e.stack.Name, e.stack.Workspace)
+	if err != nil || currentState == nil || len(currentState.Resources) == 0 {
+		return result, nil // nothing recorded yet — nothing can have drifted
+	}
+
+	ids := make([]string, 0, len(currentState.Resources))
+	for id := range currentState.Resources {
+		ids = append(ids, string(id))
+	}
+	sort.Strings(ids)
+
+	for _, idStr := range ids {
+		id := ResourceID(idStr)
+		rs := currentState.Resources[id]
+
+		p, ok := e.stack.GetProvider(providerNameForType(rs.Type))
+		if !ok {
+			result.Errors = append(result.Errors, fmt.Sprintf("%s: no provider registered", id))
+			continue
+		}
+		result.Checked++
+
+		actual, err := p.Read(ctx, id, rs.ExternalID)
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", id, err))
+			continue
+		}
+
+		if actual == nil {
+			rs.Status = StatusDrifted
+			rs.Error = "resource missing from provider"
+			result.Drifted = append(result.Drifted, ResourceDrift{ResourceID: id, Missing: true})
+			continue
+		}
+
+		changes := driftChanges(rs.Inputs, actual.Inputs)
+		if len(changes) > 0 {
+			rs.Status = StatusDrifted
+			rs.Error = ""
+			result.Drifted = append(result.Drifted, ResourceDrift{ResourceID: id, Changes: changes})
+		} else if rs.Status == StatusDrifted {
+			// Previously drifted but now back in line.
+			rs.Status = StatusRunning
+			rs.Error = ""
+		}
+	}
+
+	if err := e.stateBackend.Save(ctx, e.stack.Name, e.stack.Workspace, currentState); err != nil {
+		return result, fmt.Errorf("saving refreshed state: %w", err)
+	}
+	return result, nil
+}
+
+// driftChanges compares recorded inputs against live values, restricted to
+// the recorded keys — provider-side defaults on undeclared fields are not
+// drift.
+func driftChanges(stored, live Inputs) []FieldChange {
+	fields := make([]string, 0, len(stored))
+	for f := range stored {
+		fields = append(fields, f)
+	}
+	sort.Strings(fields)
+
+	var changes []FieldChange
+	for _, f := range fields {
+		storedVal := stored[f]
+		liveVal, ok := live[f]
+		if !ok {
+			changes = append(changes, FieldChange{Field: f, Kind: ChangeDelete, OldValue: storedVal})
+			continue
+		}
+		// String comparison tolerates int/float64 wobble from JSON state round-trips.
+		if fmt.Sprintf("%v", storedVal) != fmt.Sprintf("%v", liveVal) {
+			changes = append(changes, FieldChange{Field: f, Kind: ChangeUpdate, OldValue: storedVal, NewValue: liveVal})
+		}
+	}
+	return changes
+}
+
 // providerNameForType extracts the provider name from a resource type like "proxmox:vm"
 func providerNameForType(t ResourceType) string {
 	s := string(t)
