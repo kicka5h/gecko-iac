@@ -50,7 +50,7 @@ type mockProxmoxAPI struct {
 
 	createPool func(ctx context.Context, poolid, comment string) error
 	readPool   func(ctx context.Context, poolid string) (*PoolInfo, error)
-	updatePool func(ctx context.Context, poolid, comment string) error
+	updatePool func(ctx context.Context, poolid, comment, members string) error
 	deletePool func(ctx context.Context, poolid string) error
 
 	createBackupJob func(ctx context.Context, job BackupJobInfo) (string, error)
@@ -180,8 +180,8 @@ func (m *mockProxmoxAPI) CreatePool(ctx context.Context, poolid, comment string)
 func (m *mockProxmoxAPI) ReadPool(ctx context.Context, poolid string) (*PoolInfo, error) {
 	return m.readPool(ctx, poolid)
 }
-func (m *mockProxmoxAPI) UpdatePool(ctx context.Context, poolid, comment string) error {
-	return m.updatePool(ctx, poolid, comment)
+func (m *mockProxmoxAPI) UpdatePool(ctx context.Context, poolid, comment, members string) error {
+	return m.updatePool(ctx, poolid, comment, members)
 }
 func (m *mockProxmoxAPI) DeletePool(ctx context.Context, poolid string) error {
 	return m.deletePool(ctx, poolid)
